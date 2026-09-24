@@ -1,7 +1,6 @@
 # Army3 Offline
 
 Muc tieu cua du an la xay dung mot phien ban Army3 chay hoan toan offline
-de choi ca nhan.
 
 ## Tai lieu dau vao
 
