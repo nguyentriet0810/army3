@@ -1,0 +1,28 @@
+# Original third-party game client and bundled assets.
+# Keep this directory locally as read-only reference material.
+/Mobiarmy3HA_3.0.0_GOC/
+
+# Generated reverse-engineering output
+/analysis/generated/
+/analysis/dumps/
+/extracted/
+
+# Build and runtime output
+/build/
+/dist/
+/logs/
+/tmp/
+*.log
+*.dmp
+
+# Local editor and OS files
+.vs/
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+
+# Local secrets and configuration overrides
+.env
+.env.*
+!.env.example
