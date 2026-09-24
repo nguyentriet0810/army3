@@ -78,10 +78,14 @@ trong [báo cáo dispatch](../analysis/m3-message-dispatch.md). Hook
 - **Unknown:** tài nguyên nào được load ở từng scene và dữ liệu nào do server
   gửi sau kết nối.
 - **Confirmed:** client có một phép tính khoảng cách giữa hai cặp tọa độ
-  nguyên và một đường cập nhật tọa độ cục bộ. Handler message cũng gọi
-  đường cấu hình chứa các mảng `short[][]` mà code tạo object tọa độ
-  sử dụng; xem
-  [khảo sát ranh giới mô phỏng](../analysis/m3-simulation-boundary.md).
+  nguyên và một đường cập nhật tọa độ cục bộ. Hai entry message
+  `0x16/0x54` chia sẻ nhánh đọc các giá trị 16-bit từ buffer để điền
+  mảng `short[][]` được đường cấu hình object tọa độ sử dụng; xem
+  [khảo sát hai entry](../analysis/m3-case16-54-arrays.md) và
+  [ranh giới mô phỏng](../analysis/m3-simulation-boundary.md). Một
+  consumer lấy từng cặp mảng con theo chỉ số, tạo object hình học và
+  thêm vào `ArrayList`; chưa xác định nó được gọi theo frame hay sự
+  kiện nào.
 - **Unknown:** nơi quyết định vật lý, quỹ đạo, va chạm, sát thương và thay
   đổi địa hình; chưa thể kết luận client hay server giữ vai trò mô phỏng
   chính. Không thấy Unity Physics API trong phần IL quét được không đủ

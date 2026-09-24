@@ -90,10 +90,13 @@ thành công. Không dùng suy luận này để giả lập message `0x02` ở 
   `InspectNativeTargets.java`; dùng
   `-process GameAssembly.dll -noanalysis -readOnly`.
 
-Một call site khác trong runtime-function của handler, `0x18022D28F`,
-gọi method cấu hình nhận các mảng `short[][]`. Đây là đường từ message
-handler tới dữ liệu tọa độ cục bộ, nhưng chưa xác định byte lệnh hoặc
-nguồn/ý nghĩa các mảng; xem [m3-simulation-boundary.md](m3-simulation-boundary.md).
+Entry byte `0x16` và `0x54` cùng đi vào `0x18022ADB0`; từ đó
+có đường CFG tĩnh tới call site `0x18022D28F`, nơi handler gọi method
+cấu hình nhận các mảng `short[][]`. Nhánh này đọc byte và số 16-bit
+từ buffer message để cấp phát/điền mảng. Đây chưa phải schema packet
+hay tên nghiệp vụ; xem
+[m3-case16-54-arrays.md](m3-case16-54-arrays.md) và
+[m3-simulation-boundary.md](m3-simulation-boundary.md).
 
 Để nâng từ cấu trúc sang schema message, cần phân tích một số case
 cụ thể trong môi trường tĩnh, nối call site với dữ liệu được đọc/ghi

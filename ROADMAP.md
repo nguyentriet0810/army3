@@ -139,10 +139,20 @@ Tạo quy trình tái lập để trích xuất metadata cần thiết từ `Gam
 `analysis/m3-unity-loop.md`. Đã xác định cấu trúc bảng điều phối message,
 nhưng chưa có schema hay ý nghĩa command; xem
 `analysis/m3-message-dispatch.md`.
-Khảo sát tĩnh đã nối handler message tới dữ liệu mảng tọa độ và xác nhận
-phép tính khoảng cách cục bộ, nhưng chưa xác định nơi quyết định va
-chạm/sát thương; xem
-`analysis/m3-simulation-boundary.md`. State machine, ngữ nghĩa packet
+Khảo sát tĩnh đã nối hai entry byte điều phối `0x16/0x54` tới nhánh đọc
+mảng 16-bit từ buffer message, phân biệt hai chế độ điền mảng con
+(đọc trực tiếp hoặc tích lũy từ bước tăng), và xác nhận phép tính khoảng
+cách cục bộ. Đã thấy cặp mảng đầu được tiêu thụ tuần tự để tạo các
+object hình học; chưa xác định lịch chạy của consumer hoặc nơi dùng cặp
+mảng sau.
+Trong hai method tiêu thụ trực tiếp `0x06000B66/0x06000B67`, khảo sát
+một tầng callee và đồ thị lời gọi IL khôi phục sâu tối đa 12 cạnh chưa
+thấy đường tới hàm enqueue message gửi `0x0600028F`. Đây là kết quả âm
+có giới hạn: cùng đồ thị đó bỏ sót một cạnh đã được xác nhận ở native,
+nên không chứng minh client không gửi kết quả mô phỏng qua đường khác.
+Chưa xác định nơi quyết định va chạm/sát thương; xem
+`analysis/m3-case16-54-arrays.md` và `analysis/m3-simulation-boundary.md`.
+State machine, ngữ nghĩa packet
 và ranh giới thẩm quyền mô phỏng vẫn chưa xác định; xem
 `docs/client-architecture.md` và `docs/client-state-machine.md`.
 
