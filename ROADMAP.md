@@ -68,7 +68,7 @@ Thiết lập repository và quy tắc làm việc an toàn, tái lập được
 
 ## M1 — Kiểm kê client tĩnh
 
-**Trạng thái:** Planned
+**Trạng thái:** Complete
 
 ### Mục tiêu
 
@@ -76,13 +76,13 @@ Tạo hồ sơ kỹ thuật có thể kiểm chứng cho bản client đầu và
 
 ### Công việc
 
-- [ ] Ghi lại cây thư mục, kích thước và loại file quan trọng.
-- [ ] Ghi SHA-256 cho executable, DLL, metadata và các gói tài nguyên.
-- [ ] Xác định phiên bản Unity, kiến trúc CPU và kiểu build IL2CPP.
-- [ ] Kiểm tra chữ ký số và thông tin phiên bản của các binary.
-- [ ] Lập danh mục `StreamingAssets`, asset archive và dữ liệu bản đồ.
-- [ ] Tìm cấu hình, hostname, địa chỉ IP, port và chuỗi liên quan đến mạng.
-- [ ] Ghi lại các dấu hiệu làm rối, mã hóa hoặc chống phân tích.
+- [x] Ghi lại cây thư mục, kích thước và loại file quan trọng.
+- [x] Ghi SHA-256 cho executable, DLL, metadata và các gói tài nguyên.
+- [x] Xác định phiên bản Unity, kiến trúc CPU và kiểu build IL2CPP.
+- [x] Kiểm tra chữ ký số và thông tin phiên bản của các binary.
+- [x] Lập danh mục `StreamingAssets`, asset archive và dữ liệu bản đồ.
+- [x] Tìm cấu hình, hostname, địa chỉ IP, port và chuỗi liên quan đến mạng.
+- [x] Ghi lại các dấu hiệu làm rối, mã hóa hoặc chống phân tích.
 
 ### Đầu ra
 
@@ -99,7 +99,7 @@ Tạo hồ sơ kỹ thuật có thể kiểm chứng cho bản client đầu và
 
 ## M2 — Bộ công cụ phân tích IL2CPP
 
-**Trạng thái:** Planned
+**Trạng thái:** Hoàn thành
 
 ### Mục tiêu
 
@@ -108,13 +108,13 @@ Tạo quy trình tái lập để trích xuất metadata cần thiết từ `Gam
 
 ### Công việc
 
-- [ ] Chọn và ghi phiên bản công cụ IL2CPP phù hợp.
-- [ ] Kiểm tra khả năng tương thích với Unity 6000.5.10f1.
-- [ ] Viết script chạy công cụ với đường dẫn cấu hình được, không hard-code máy.
-- [ ] Giữ toàn bộ output lớn trong thư mục đã ignore.
-- [ ] Trích xuất danh sách assembly, type, method, field và string hữu ích.
-- [ ] Đánh giá mức độ ảnh hưởng của obfuscation.
-- [ ] Ghi lại giới hạn và sai số của từng công cụ.
+- [x] Chọn và ghi phiên bản công cụ IL2CPP phù hợp.
+- [x] Kiểm tra khả năng tương thích với Unity 6000.5.10f1.
+- [x] Viết script chạy công cụ với đường dẫn cấu hình được, không hard-code máy.
+- [x] Giữ toàn bộ output lớn trong thư mục đã ignore.
+- [x] Trích xuất danh sách assembly, type, method, field và string hữu ích.
+- [x] Đánh giá mức độ ảnh hưởng của obfuscation.
+- [x] Ghi lại giới hạn và sai số của từng công cụ.
 
 ### Đầu ra
 
@@ -131,7 +131,12 @@ Tạo quy trình tái lập để trích xuất metadata cần thiết từ `Gam
 
 ## M3 — Lập bản đồ kiến trúc client
 
-**Trạng thái:** Planned
+**Trạng thái:** In Progress
+
+Đã đối chiếu transport, hai worker gửi/nhận và đường chọn host/port; xem
+`analysis/m3-native-transport.md` và `analysis/m3-endpoint-state.md`.
+State machine, ngữ nghĩa packet và ranh giới mô phỏng vẫn chưa xác định; xem `docs/client-architecture.md` và
+`docs/client-state-machine.md`.
 
 ### Mục tiêu
 
