@@ -133,10 +133,18 @@ Tạo quy trình tái lập để trích xuất metadata cần thiết từ `Gam
 
 **Trạng thái:** In Progress
 
-Đã đối chiếu transport, hai worker gửi/nhận và đường chọn host/port; xem
-`analysis/m3-native-transport.md` và `analysis/m3-endpoint-state.md`.
-State machine, ngữ nghĩa packet và ranh giới mô phỏng vẫn chưa xác định; xem `docs/client-architecture.md` và
-`docs/client-state-machine.md`.
+Đã đối chiếu transport, hai worker gửi/nhận, đường chọn host/port và một
+đường `FixedUpdate` → collection transport; xem
+`analysis/m3-native-transport.md`, `analysis/m3-endpoint-state.md` và
+`analysis/m3-unity-loop.md`. Đã xác định cấu trúc bảng điều phối message,
+nhưng chưa có schema hay ý nghĩa command; xem
+`analysis/m3-message-dispatch.md`.
+Khảo sát tĩnh đã nối handler message tới dữ liệu mảng tọa độ và xác nhận
+phép tính khoảng cách cục bộ, nhưng chưa xác định nơi quyết định va
+chạm/sát thương; xem
+`analysis/m3-simulation-boundary.md`. State machine, ngữ nghĩa packet
+và ranh giới thẩm quyền mô phỏng vẫn chưa xác định; xem
+`docs/client-architecture.md` và `docs/client-state-machine.md`.
 
 ### Mục tiêu
 

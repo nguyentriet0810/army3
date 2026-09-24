@@ -44,7 +44,11 @@ caller 0x060001C1 hoặc caller nội bộ
 
 `0x0600028D` là điểm vào mạng quan trọng đầu tiên. Việc hai caller nội bộ gọi
 `0x0600028A` **có thể** liên quan đến thử lại kết nối, nhưng không đủ bằng
-chứng để gọi đó là reconnect. Chưa thấy bằng chứng xác nhận heartbeat.
+chứng để gọi đó là reconnect. Handler message có thêm case byte `0x02`
+gọi đường đóng/reset rồi gọi caller yêu cầu kết nối `FUN_18043bea0`;
+xem [báo cáo dispatch](../analysis/m3-message-dispatch.md). Đây là
+ứng viên mở lại kết nối, chưa xác nhận điều kiện runtime. Chưa thấy
+bằng chứng xác nhận heartbeat.
 
 Đối chiếu native cho thấy callback thứ nhất xử lý hàng đợi gửi qua `BinaryWriter`, callback thứ hai đọc message qua `BinaryReader`. Cả hai có lời gọi sleep `5`, nhưng chưa thể gọi đó là heartbeat. Chi tiết xem báo cáo transport native.
 
@@ -54,7 +58,18 @@ chứng để gọi đó là reconnect. Chưa thấy bằng chứng xác nhận 
 `diffable-cs`. Trong số đó có các tên method Unity còn nguyên như `Awake`,
 `Start`, `Update`, `FixedUpdate`, `OnApplicationQuit`. Đây là **Confirmed** về
 chữ ký type/method, không chứng minh thứ tự thực thi hoặc scene chứa chúng.
-Chưa nối được các callback Unity tới caller `0x060001C1` hay transport type.
+Đã nối `FixedUpdate` `0x06000373` của một component ứng viên main loop tới
+method transport `0x06000297`, và đối chiếu native call tương ứng. Method
+transport này thao tác trên một collection tại field tĩnh `+0xA8`. Worker
+nhận cũng có nhánh bàn giao message vào cùng collection; xem
+[báo cáo Unity loop](../analysis/m3-unity-loop.md). Chưa nối được callback
+Unity tới caller kết nối `0x060001C1`, hoặc xác định scene và thời điểm
+component được tạo. Field transport `+0x20` có type interface nhận message;
+method triển khai `0x060006DC` là ứng viên handler cấp ứng dụng, nhưng chưa
+giải được ý nghĩa các nhánh của nó. Đã xác định bảng nhảy theo byte lệnh
+trong [báo cáo dispatch](../analysis/m3-message-dispatch.md). Hook
+`BeforeSceneLoad` hiện thấy thuộc
+`AndroidBridge`, không nên coi là bootstrap của game logic.
 
 ## Tài nguyên, mô phỏng và ranh giới server
 
@@ -62,8 +77,15 @@ Chưa nối được các callback Unity tới caller `0x060001C1` hay transport
   archive `res_x*.zip`; xem [m1-findings.md](../analysis/m1-findings.md).
 - **Unknown:** tài nguyên nào được load ở từng scene và dữ liệu nào do server
   gửi sau kết nối.
-- **Unknown:** nơi tính vật lý, quỹ đạo, sát thương và thay đổi địa hình; chưa
-  thể kết luận client hay server giữ vai trò mô phỏng chính.
+- **Confirmed:** client có một phép tính khoảng cách giữa hai cặp tọa độ
+  nguyên và một đường cập nhật tọa độ cục bộ. Handler message cũng gọi
+  đường cấu hình chứa các mảng `short[][]` mà code tạo object tọa độ
+  sử dụng; xem
+  [khảo sát ranh giới mô phỏng](../analysis/m3-simulation-boundary.md).
+- **Unknown:** nơi quyết định vật lý, quỹ đạo, va chạm, sát thương và thay
+  đổi địa hình; chưa thể kết luận client hay server giữ vai trò mô phỏng
+  chính. Không thấy Unity Physics API trong phần IL quét được không đủ
+  để suy ra phần nào giữ thẩm quyền.
 - **Confirmed:** port khởi tạo là `19150`, nhưng có nhiều đường ghi đè host/port trước kết nối; xem [báo cáo endpoint](../analysis/m3-endpoint-state.md).
 - **Unknown:** port thực tế ở mọi phiên, handshake, framing đầy đủ, ý nghĩa command ID, encoding của packet,
   heartbeat và reconnect.
@@ -84,7 +106,8 @@ máy khi cần, trước khi chuyển nhận định sang `Confirmed` về hành
 
 Đã đối chiếu method kết nối `0x0600028D` với native `0x1804DF5A0` và hai callback với `0x1804E2520` (đường gửi) / `0x1804E3D60` (đường nhận). Xem [báo cáo transport native](../analysis/m3-native-transport.md). Kết quả này xác nhận ranh giới transport ở mức cấu trúc, chưa xác nhận message ngữ nghĩa hay luồng màn hình.
 
-1. Đã lần caller `0x060001C1` tới mảng chọn host/port; tiếp tục xác định callback Unity hoặc màn hình kích hoạt nhánh đó.
+1. Đã lần caller `0x060001C1` tới mảng chọn host/port và nối worker nhận với collection được `FixedUpdate` xử lý; tiếp tục nối thao tác UI chọn endpoint với callback Unity và xác định điều kiện bàn giao trực tiếp/qua collection.
 2. Xác minh các nhánh framing, biến đổi byte và xử lý lỗi ở native.
 3. Liên kết state/tài nguyên với đăng nhập, lobby, phòng và trận.
-4. Xác định nơi tính vật lý, sát thương và thay đổi địa hình trước khi chốt M3.
+4. Lần đường hình học cục bộ tới cập nhật bản đồ/đối tượng và message,
+   rồi xác định nơi tính sát thương và thay đổi địa hình trước khi chốt M3.
