@@ -104,6 +104,65 @@ disassembly của `GameAssembly.dll`. Không chạy client hoặc kết nối se
   tới `0x180407C90` (`0x06000B66`). Nested queue `Add` mà
   `0x0600028F` gọi nằm ở `FUN_1804E23C0`. Đối chiếu này xác nhận
   các cạnh dương, không khép kín các cạnh virtual/indirect còn thiếu.
+- **Confirmed:** hai virtual call slot `+0x178` trong `0x060007C0`
+  lấy object từ hai field tĩnh cùng type tại `+0x2B0/+0x2B8` và gọi
+  sibling override `0x06000A67`. Override này chọn hai nhánh
+  `0x06000A6C/0x06000A6D` theo một byte trạng thái; các nhánh duyệt
+  collection cục bộ và chưa cho thấy direct call tới enqueue/send.
+  Cả 11 computed call của `FUN_1802870F0` đã được phân loại: hai call
+  sibling override và chín thao tác collection (`Count`, `Item`,
+  `Remove`); không call nào trực tiếp là enqueue/worker/serializer.
+  Xem
+  [khảo sát virtual dispatch](m3-virtual-dispatch.md).
+- **Confirmed (cấu trúc):** hai mảng sau C/D tại `+0x58/+0x60` cũng
+  được `0x06000B66` đọc theo cùng cursor. Method `0x06000A43` ghép
+  chúng thành danh sách point `(C[i], D[i])`; `0x06000A62` duyệt danh
+  sách theo thứ tự và so sánh point với tọa độ hiện tại của object.
+  Cấu trúc này tương thích với waypoint/path nhưng chưa có tên ngữ nghĩa
+  gốc. Xem [đường projectile và sát thương](m3-projectile-damage-terrain.md).
+- **Confirmed:** field entity `+0x17C` là HP hiện tại và `+0x180` là
+  HP tối đa: code hiển thị tính `current * 100 / max`, còn các nhánh
+  trạng thái kiểm tra `current <= 0`. Method `0x0600042A` kiểm tra vùng
+  chồng lấn giữa projectile và player, trừ damage của projectile tại
+  `+0x68`, gọi `0x0600042B`, rồi ghi HP mới trở lại `+0x17C`.
+  Caller tìm được là method update projectile `0x06000BB4`.
+- **Confirmed:** entity còn có HP đích `+0x184`, cờ nội suy `+0x37C` và
+  bước `+0x3A8`. `0x0600042B` thiết lập chúng trong đường damage cục bộ;
+  method công khai `0x0600044A` thiết lập cùng state từ `(int, sbyte)`;
+  `0x0600044B` được các vòng update entity gọi để kéo HP hiện tại về đích.
+  Không có direct call/`ldftn` tới `0x0600044A` trong IL khôi phục và native
+  chỉ có reference từ `.pdata` cùng một dãy code pointer trong `.data`, không
+  có code xref tới ô pointer riêng. Vì vậy nguồn cập nhật qua method này vẫn
+  **Unknown**; hiện thậm chí chưa có execution edge chứng minh method chạy,
+  và các reference này chưa phải bằng chứng về callback mạng.
+- **Confirmed (phép kiểm tra âm có giới hạn):** quét toàn handler native
+  `FUN_1801FCAB0` theo displacement HP/cờ/bước chỉ gặp ba offset trùng trên
+  stack, không gặp object access; handler cũng không direct-call ba helper
+  `0x0600042B/44A/44B`. Điều này loại đường ghi HP trực tiếp trong dispatcher,
+  nhưng không loại callback, virtual/interface dispatch hay helper trung gian.
+- **Confirmed (phép kiểm tra âm có giới hạn):** các write site
+  `Texture2D` đã kiểm tra là helper recolor hoặc crop/copy tài nguyên;
+  chưa thấy chúng trong đường projectile, damage hoặc callback kết thúc.
+  Từ bốn callback `0x06000B69/6C/6D/6E`, đồ thị IL khôi phục cũng không
+  tìm được đường tới enqueue gửi hoặc hai helper ảnh chính ở độ sâu 12.
+  Điều này không loại trừ buffer/mask tự quản lý hay cạnh native bị thiếu.
+- **Confirmed (cấu trúc):** đường `0x06000A62 -> 0x0600080B ->
+  0x060005B8` đọc một stamp ảnh qua `0x06000830`, duyệt vùng quanh tọa độ
+  va chạm và ghi `0` hoặc màu thay thế vào `int[]` mask đích. Các sentinel
+  màu được kiểm tra gồm `0xFF0000` và `0xFFFFFF`.
+- **Strongly inferred:** phép ghi mask trên là biến đổi địa hình/tạo hố cục
+  bộ. Kết luận ngữ nghĩa dựa trên tọa độ va chạm, stamp và thao tác xóa pixel;
+  tên gốc của các type/method vẫn bị làm rối.
+- **Confirmed (đối chiếu native):** `0x060007C0` gọi `0x06000B67` tại
+  `0x180287C4E`; `0x06000B67` duyệt collection và gọi `0x06000A62` tại
+  `0x180409CD6`; từ đó IL nối tiếp tới `0x0600080B -> 0x060005B8`.
+  Wrapper `0x06000A52` cũng tail-call `0x06000A62`. Điều này đặt phép sửa
+  mask trong đường update collection cục bộ. Cạnh `0x06000B67 ->
+  0x06000A62` là một cạnh native khác bị call graph IL bỏ sót.
+- **Confirmed (cấu trúc):** `0x06000407` đặt HP hiện tại và HP tối đa bằng
+  cùng một giá trị; `0x060001F6` gọi nó theo lô từ năm mảng dữ liệu qua chuỗi
+  `0x060007AF -> 0x060007EC -> 0x060001F6`. Chưa gắn được entry công khai
+  `0x060007AF` với command mạng cụ thể.
 
 ## Diễn giải và giới hạn
 
@@ -114,10 +173,19 @@ disassembly của `GameAssembly.dll`. Không chạy client hoặc kết nối se
   `0x18022ADB0` và có đường đi tĩnh tới call site
   `0x18022D28F`. Đoạn code đọc giá trị 16-bit từ buffer message rồi
   ghi vào các mảng; xem [khảo sát hai entry](m3-case16-54-arrays.md).
-- **Unknown:** nơi tính quỹ đạo, va chạm, trúng đích, sát thương, địa
-  hình và trạng thái trận cuối cùng. Đã thấy dữ liệu mảng được giải mã
-  từ message, nhưng chưa biết ý nghĩa mảng hoặc server có chấp nhận
-  kết quả mô phỏng của client hay không.
+- **Confirmed:** client chứa ít nhất một đường update projectile, kiểm tra
+  trúng đích dạng vùng chồng lấn và trừ HP cục bộ. Đây không còn là
+  hành vi chỉ suy ra từ tên method.
+- **Inferred:** C/D là waypoint/path do được ghép thành point và duyệt
+  tuần tự. Chưa biết chúng là quỹ đạo gameplay, đường effect hay dữ liệu
+  trình diễn khác.
+- **Confirmed (công thức):** khi transform bật, raw command cho entry logic
+  `C` là `((C + shift) mod 256) XOR key[recvIndex]`; khi tắt thì raw = logic.
+  Vì key/index có state, `0x16/0x54` không có raw byte cố định.
+- **Unknown:** command nào kích hoạt/đồng bộ hit và HP; key/shift/index của
+  một phiên và ý nghĩa nghiệp vụ chính xác của entry `0x16/0x54`; trạng thái
+  trận cuối cùng; server có xác nhận hoặc ghi đè kết quả mô phỏng của client
+  hay không.
 - **Unknown:** object được tạo từ hai mảng A/B có kích hoạt gửi message
   qua một tầng khác hay không. Kết quả âm ở hai method tiêu thụ trực
   tiếp chưa phân định trách nhiệm mô phỏng của client/server.
@@ -181,8 +249,14 @@ IL khôi phục. Vì vậy kết quả âm ở trên chỉ áp dụng cho đồ 
 Cpp2IL khôi phục, không phải toàn bộ native binary.
 Ghidra log đọc-only tương ứng:
 `analysis/generated/ghidra/geometry-send-native-script.log`.
+Đối chiếu mới cho đường update/mask dùng `InspectNativeTargets.java` với
+`18030BFC0`, `180409CD6`, `180305434`; `InspectDecompileWindow.java` với
+`1804098B0 FUN_18030beb0`; và `InspectInstructionWindow.java` trên cửa sổ
+`180409C90..180409D20`.
 
-Output Cpp2IL chứa placeholder và có method bị bỏ qua. Bước tiếp theo
-là kiểm tra native/virtual dispatch của các nhánh còn thiếu, tìm nơi
-hai field mảng sau được dùng, đường ghi/đọc HP và biến đổi địa hình,
-rồi mới phân vai client/server.
+Output Cpp2IL chứa placeholder và có method bị bỏ qua. Hai field mảng sau,
+đường HP, một nhánh sát thương cục bộ và đường biến đổi `int[]` mask địa hình
+đã được định vị. Bước tiếp theo là tìm đường bàn giao gián tiếp nhận cặp
+`(int HP, sbyte loại)` tới setter `0x0600044A`, đồng thời xác định điều kiện
+runtime và state key/shift/index của entry `0x16/0x54`, trước khi kết luận
+server xác nhận, phát lại hay ghi đè trạng thái nào.

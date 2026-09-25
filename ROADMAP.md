@@ -136,22 +136,78 @@ Tạo quy trình tái lập để trích xuất metadata cần thiết từ `Gam
 Đã đối chiếu transport, hai worker gửi/nhận, đường chọn host/port và một
 đường `FixedUpdate` → collection transport; xem
 `analysis/m3-native-transport.md`, `analysis/m3-endpoint-state.md` và
-`analysis/m3-unity-loop.md`. Đã xác định cấu trúc bảng điều phối message,
-nhưng chưa có schema hay ý nghĩa command; xem
-`analysis/m3-message-dispatch.md`.
+`analysis/m3-unity-loop.md`. Đã xác định cấu trúc bảng điều phối message và
+schema từng phần cho một số command; ý nghĩa nghiệp vụ của phần lớn command
+vẫn chưa biết. Xem `analysis/m3-message-dispatch.md`.
 Khảo sát tĩnh đã nối hai entry byte điều phối `0x16/0x54` tới nhánh đọc
 mảng 16-bit từ buffer message, phân biệt hai chế độ điền mảng con
 (đọc trực tiếp hoặc tích lũy từ bước tăng), và xác nhận phép tính khoảng
-cách cục bộ. Đã thấy cặp mảng đầu được tiêu thụ tuần tự để tạo các
-object hình học; chưa xác định lịch chạy của consumer hoặc nơi dùng cặp
-mảng sau.
+cách cục bộ. Cặp mảng đầu được tiêu thụ để tạo object hình học; cặp sau
+C/D được ghép thành danh sách point có thứ tự rồi được consumer khác duyệt
+tuần tự. Cấu trúc này tương thích với waypoint/path, nhưng lịch chạy và
+ngữ nghĩa gameplay chính xác vẫn chưa xác định.
 Trong hai method tiêu thụ trực tiếp `0x06000B66/0x06000B67`, khảo sát
 một tầng callee và đồ thị lời gọi IL khôi phục sâu tối đa 12 cạnh chưa
 thấy đường tới hàm enqueue message gửi `0x0600028F`. Đây là kết quả âm
 có giới hạn: cùng đồ thị đó bỏ sót một cạnh đã được xác nhận ở native,
 nên không chứng minh client không gửi kết quả mô phỏng qua đường khác.
-Chưa xác định nơi quyết định va chạm/sát thương; xem
-`analysis/m3-case16-54-arrays.md` và `analysis/m3-simulation-boundary.md`.
+Hai virtual call đã nhận diện từ consumer đi tới sibling override
+`0x06000A67`; hai nhánh của override tiếp tục duyệt collection cục bộ
+và chưa lộ đường gửi. Cả 11 computed call native của consumer đã được
+phân loại thành hai sibling override và chín thao tác collection; không
+call nào trực tiếp là enqueue/worker/serializer. Xem
+`analysis/m3-virtual-dispatch.md`.
+Đã xác định một đường update projectile kiểm tra vùng chồng lấn với player,
+trừ damage khỏi HP hiện tại và xử lý nhánh HP về 0. Đường
+`0x06000A62 -> 0x0600080B -> 0x060005B8` còn áp stamp ảnh vào `int[]` mask
+quanh tọa độ va chạm; đây là phép biến đổi mask cục bộ và được suy luận mạnh
+là thay đổi địa hình/tạo hố. Đối chiếu native còn xác nhận đường update
+`0x060007C0 -> 0x06000B67 -> 0x06000A62`, trong đó `0x06000B67` duyệt
+collection object. Một đường batch khác đặt HP hiện tại/tối đa từ dữ liệu
+mảng. Đã tách thêm state HP đích (`+0x184`), cờ (`+0x37C`) và bước nội suy
+(`+0x3A8`): một setter công khai thiết lập state này và vòng update entity kéo
+HP hiện tại về đích. Message dispatcher không truy cập trực tiếp các field đó,
+và hai data reference của setter chỉ nằm trong `.pdata`/dãy code pointer,
+không phải code xref; nguồn gọi gián tiếp vẫn chưa xác định. Hai entry `0x16/0x54`
+đã nối bằng state chung tới object có đường sửa mask. Công thức raw/logical
+command đã xác định là XOR key cộng/trừ shift theo index có state, nên không
+có raw byte cố định; key thực tế, điều kiện runtime và nghĩa gameplay vẫn chưa
+rõ. Payload thiết lập `0xE5` bắt đầu bằng độ dài, seed key và shift; client
+biến seed thành prefix-XOR key, rồi đọc một giá trị text-like length-prefixed.
+Tùy state phiên, client lưu giá trị đó hoặc gửi `0xA9` subcommand `0` kèm hai
+bộ đếm; các nhánh nhận `0xA9` thao tác cờ, bộ đếm và collection transport.
+Năm logical command `0x88/0xA4/0xC4/0xD7/0xE1` dùng length 4 byte và không
+biến đổi length/payload trong đường đã thấy. Đã xác nhận `0x88` đọc sáu số
+64-bit, `0xE1` đọc ba blob length-prefixed vào các bảng state và đặt cờ hoàn
+tất. Đã lần caller `0xE1` về handler `0xE2`: handler này điều phối ba nhánh
+cache/request `0xDA/0xE1/0xE0`, mỗi nhánh hội tụ về một readiness flag. Khi
+đủ ba cờ, client đặt `appReady`, gửi `0xDB` và xóa cờ. UI event case `1` sau đó
+có thể gửi `0x9E` selector `0`; response hydrate entity/game state và có nhánh
+chuyển UI. Schema selector `0` đã xác nhận là một record keyed gồm 19 giá trị,
+có string, cụm sáu word và một record con tùy chọn gate bởi sentinel `-1`;
+hai số cuối là tọa độ `x/y`. Client quét grid theo `y` rồi có thể gửi request
+`0x9E/2`; event selector `2` mang `entityKey + x/y`, so current coordinate và
+đặt correction khi khác. Consumer đã xác nhận correction là hybrid: bước ngang
+theo tick có collision check, có thể snap `y` sau hội tụ và micro-reconcile sai
+số mirror nhỏ; không phải teleport thuần. Nhánh nhận không gửi lại, nên đây
+không phải vòng đệ quy. Logic placement làm suy yếu tên main menu/lobby;
+scene đích vẫn chưa biết, và chưa nối được
+nguồn `0xE2` ngược về `0xE5/0xA9`. `0xC4` thuộc UI event case `2` có gate
+one-shot riêng, không có bằng chứng thuộc chuỗi bootstrap tự động. Xem
+`analysis/m3-length4-commands.md` và
+`analysis/m3-command-9e-selector0.md` cùng
+`analysis/m3-command-9e-selector2.md`.
+Đã lần thêm command `0x2B`: caller UI yêu cầu đủ chín text input, sender ghi
+chín string length-prefixed và response chỉ đọc một byte trước khi tạo/tái
+dùng object UI rồi gọi virtual slot `7`. Đã ánh xạ đủ chín control sang
+localization ID và wire order; plaintext label vẫn chưa giải được vì bảng
+chuỗi đi qua metadata handle và decoder riêng. Cấu trúc phù hợp một form
+onboarding/account/profile nhưng chưa đủ bằng chứng gọi là login; xem
+`analysis/m3-command-2b.md`.
+Chưa nối được đường hit/HP tới command
+message hoặc xác định server có xác nhận/ghi đè kết quả; xem
+`analysis/m3-projectile-damage-terrain.md` và
+`analysis/m3-simulation-boundary.md`.
 State machine, ngữ nghĩa packet
 và ranh giới thẩm quyền mô phỏng vẫn chưa xác định; xem
 `docs/client-architecture.md` và `docs/client-state-machine.md`.

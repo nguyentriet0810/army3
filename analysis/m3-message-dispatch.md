@@ -43,18 +43,35 @@ Ví dụ để kiểm tra cách đọc bảng, **không phải tên message**:
 | --- | ---: | --- |
 | `0x82` | 0 | `0x180248d84` |
 | `0x83` | 1 | mặc định |
+| `0x9E` | 28 | `0x180249714` |
 | `0xA9` | 39 | mặc định |
+| `0xDA` | 88 | `0x18021415C` |
+| `0xDB` | 89 | mặc định |
+| `0xE0` | 94 | `0x18021482F` |
+| `0xE1` | 95 | `0x1802143EA` |
+| `0xE2` | 96 | `0x1802135A8` |
 | `0xE5` | 99 | mặc định |
 | `0x00` | 126 | `0x180228159` |
 | `0x01` | 127 | mặc định |
 | `0x02` | 128 | `0x180203b91` |
+| `0x2B` | 169 | `0x1801fec7d` |
 | `0x7F` | 253 | `0x180204031` |
 
 Việc `0x83`, `0xA9`, `0xE5` về mặc định ở handler này phù hợp với
 worker nhận xử lý riêng ba byte đó trước khi bàn giao message thường;
 không kết luận rằng chúng không thể xuất hiện trong tình huống khác.
-Các byte trong bảng là byte lệnh **sau** biến đổi tùy trạng thái, không
-nhất thiết là byte thô trên TCP.
+Các byte trong bảng là byte lệnh logic **sau** biến đổi tùy trạng thái. Khi
+cờ biến đổi tắt, byte này bằng byte thô. Khi cờ bật, quan hệ chính xác là:
+
+```text
+logical = (raw XOR key[recvIndex]) - shift    (mod 256)
+raw     = (logical + shift) XOR key[recvIndex]
+```
+
+Do `recvIndex` thay đổi theo mọi byte đã biến đổi trước đó, entry `0x16` hay
+`0x54` không ánh xạ tới một raw byte cố định. Xem
+[khung packet](m3-packet-framing.md) và
+[vòng đời biến đổi byte](m3-byte-transform-state.md).
 
 ## Một case đã lần được: `0x02`
 
@@ -73,6 +90,34 @@ nghĩa hai field đó.
 kết nối sau thông điệp từ server. Chưa biết điều kiện runtime để case
 này nhận message, hoặc liệu kết nối kế tiếp
 thành công. Không dùng suy luận này để giả lập message `0x02` ở M4.
+
+## Một case đã lần được: `0x2B`
+
+Entry `169` đi tới `0x1801FEC7D`. Handler chỉ đọc một byte, tạo hoặc tái dùng
+một object UI/state rồi gọi virtual slot `7`. Phía gửi nhận chín string từ
+một form chín input bắt buộc và ghi chín giá trị length-prefixed. Cấu trúc này
+được ghi riêng ở [m3-command-2b.md](m3-command-2b.md); ý nghĩa đăng ký, hồ sơ
+hay xác thực vẫn `Unknown`, nên chưa gọi nó là login.
+
+## Cụm bootstrap `0xE2`, `0xDA/0xE1/0xE0`, `0xDB` và `0x9E`
+
+`Confirmed`: case `0xE2` so sánh ba cặp version/cache. Mỗi mismatch gửi một
+trong ba request `0xDA`, `0xE1`, `0xE0`; cache match đi đường tải cục bộ. Các
+response và đường cache cùng hội tụ về ba readiness flag. Một consumer khác
+đợi đủ ba cờ, đặt `appReady`, gửi `0xDB` rồi xóa chúng. `0xDB` không có case
+xử lý riêng trong jump table này.
+
+`Confirmed`: UI event case `1` kiểm tra `appReady` rồi gửi `0x9E` selector `0`.
+Response `0x9E` selector `0` hydrate một record keyed bằng byte đầu, có schema
+cố định cộng một record con tùy chọn, rồi có nhánh placement và chuyển scene.
+Hai field cuối là tọa độ `x/y`; client có thể gửi selector `2`, còn event
+selector `2` trả `entityKey + x/y` và đặt correction khi khác current state.
+Xem [schema selector 0](m3-command-9e-selector0.md) và
+[đồng bộ selector 2](m3-command-9e-selector2.md).
+Tên scene đích vẫn `Unknown`; suy luận main menu/lobby trước đây không còn đủ
+mạnh sau khi thấy logic grid/tọa độ.
+Control flow và các khoảng trống còn lại được ghi tại
+[m3-length4-commands.md](m3-length4-commands.md).
 
 ## Chứng cứ và bước tiếp theo
 

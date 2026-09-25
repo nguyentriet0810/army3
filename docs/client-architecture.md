@@ -85,14 +85,79 @@ trong [báo cáo dispatch](../analysis/m3-message-dispatch.md). Hook
   [ranh giới mô phỏng](../analysis/m3-simulation-boundary.md). Một
   consumer lấy từng cặp mảng con theo chỉ số, tạo object hình học và
   thêm vào `ArrayList`; chưa xác định nó được gọi theo frame hay sự
-  kiện nào.
-- **Unknown:** nơi quyết định vật lý, quỹ đạo, va chạm, sát thương và thay
-  đổi địa hình; chưa thể kết luận client hay server giữ vai trò mô phỏng
-  chính. Không thấy Unity Physics API trong phần IL quét được không đủ
-  để suy ra phần nào giữ thẩm quyền.
+  kiện nào. Hai virtual call tiếp theo đã được nối tới một sibling
+  override có hai nhánh duyệt collection, nhưng chưa thấy đường gọi
+  trực tiếp tới transport gửi. Cả 11 computed call của consumer hiện
+  đã được phân loại thành sibling override hoặc thao tác collection;
+  xem
+  [khảo sát virtual dispatch](../analysis/m3-virtual-dispatch.md).
+- **Confirmed:** hai mảng sau C/D được ghép thành danh sách point có thứ tự
+  và được consumer khác duyệt tuần tự. Client còn có một vòng update
+  projectile dùng số học riêng; nó kiểm tra vùng projectile/player, trừ
+  damage tại field projectile `+0x68` khỏi HP hiện tại của player
+  (`+0x17C`) và xử lý nhánh HP về 0. HP tối đa nằm ở `+0x180`.
+  Xem [đường projectile, damage và địa hình](../analysis/m3-projectile-damage-terrain.md).
+- **Inferred:** C/D là waypoint/path cho chuyển động hoặc trình diễn.
+- **Confirmed (cấu trúc):** `0x06000A62 -> 0x0600080B -> 0x060005B8`
+  đọc một stamp ảnh rồi ghi `0`/màu thay thế vào `int[]` mask quanh tọa độ
+  va chạm. Đây là bằng chứng client biến đổi mask cục bộ; ngữ nghĩa tạo hố/
+  thay đổi địa hình được xếp **Strongly inferred**. Các helper ghi `Texture2D`
+  đã kiểm tra riêng vẫn chỉ là đường recolor/crop tài nguyên.
+- **Confirmed (native):** đường update
+  `0x060007C0 -> 0x06000B67 -> 0x06000A62` duyệt collection object rồi đi
+  tiếp vào phép sửa mask trên. Cạnh thứ hai bị thiếu trong IL khôi phục nhưng
+  có direct call tại `0x180409CD6`.
+- **Confirmed (cấu trúc):** một đường batch setup
+  `0x060007AF -> 0x060007EC -> 0x060001F6 -> 0x06000407` đặt HP hiện tại
+  và HP tối đa từ dữ liệu mảng. Chưa nối được entry này với command mạng.
+- **Confirmed (cấu trúc):** HP còn có state nội suy gồm target `+0x184`, cờ
+  `+0x37C` và bước `+0x3A8`. Setter công khai `0x0600044A` thiết lập target;
+  `0x0600044B` chạy trong update entity và kéo current HP về target. Chưa thấy
+  direct call/`ldftn` tới setter này, và message dispatcher không truy cập trực
+  tiếp các field HP. Hai data reference của setter chỉ thuộc `.pdata` và một
+  dãy code pointer trong `.data`, chưa phải bằng chứng callback; hiện chưa có
+  execution edge chứng minh setter chạy, nên nguồn cập nhật gián tiếp vẫn
+  chưa biết.
+- **Unknown:** server có xác nhận hoặc ghi đè hit/HP/địa hình hay không.
+  Không thấy Unity Physics API vẫn không đủ để xác định thẩm quyền.
+- **Confirmed (codec command):** khi transform bật, client giải
+  `logical = (raw XOR key[recvIndex]) - shift` theo modulo 256; chiều nghịch
+  là `raw = (logical + shift) XOR key[recvIndex]`. Vì vậy `0x16/0x54` không
+  có raw byte cố định nếu chưa biết state khóa của phiên.
 - **Confirmed:** port khởi tạo là `19150`, nhưng có nhiều đường ghi đè host/port trước kết nối; xem [báo cáo endpoint](../analysis/m3-endpoint-state.md).
-- **Unknown:** port thực tế ở mọi phiên, handshake, framing đầy đủ, ý nghĩa command ID, encoding của packet,
-  heartbeat và reconnect.
+- **Confirmed (một phần handshake/framing):** `0xE5` cài prefix-XOR key,
+  shift và bật transform, sau đó đọc một giá trị length-prefixed; `0xA9`
+  thao tác cờ/bộ đếm/collection transport. Năm command
+  `0x88/0xA4/0xC4/0xD7/0xE1` dùng outer length 4 byte. Handler `0xE2` so
+  sánh ba cặp version/cache: cache mismatch gửi request rỗng
+  `0xDA/0xE1/0xE0`, cache match tải dữ liệu cục bộ; cả hai đường đều đặt một
+  trong ba cờ `+0x18A/+0x188/+0x189`. Barrier đủ ba cờ đặt `appReady`, gửi
+  `0xDB` rồi xóa cờ. Xem
+  [m3-length4-commands.md](../analysis/m3-length4-commands.md).
+- **Confirmed (bootstrap/UI):** UI event case `1` chỉ gửi `0x9E` selector `0`
+  khi `appReady` đã bật. Response selector `0` đọc một record keyed gồm 19
+  giá trị và một field tùy chọn gate bởi sentinel `-1`, hydrate nhiều object
+  rồi có nhánh gọi routine chuyển UI. Hai số cuối là tọa độ `x/y`; client quét
+  grid theo `y`, có thể gửi tiếp `0x9E` selector `2`, và event selector `2`
+  đặt state correction khi tọa độ nhận được khác current coordinate. Consumer
+  update xử lý correction theo kiểu hybrid: di chuyển ngang từng tick qua
+  collision map, có đường căn `y` sau hội tụ và một bước micro-reconcile cho
+  sai số mirror tối đa hai đơn vị; không phải teleport thuần. Xem
+  [schema selector 0](../analysis/m3-command-9e-selector0.md) và
+  [đồng bộ selector 2](../analysis/m3-command-9e-selector2.md). Logic này làm
+  suy yếu tên main menu/lobby; scene đích hiện vẫn `Unknown`.
+  Sender `0xC4` thuộc UI event case `2` với gate one-shot riêng, không có bằng
+  chứng là bước tự động trong bootstrap.
+- **Unknown:** port thực tế ở mọi phiên, execution edge từ `0xE5/0xA9` tới
+  nguồn `0xE2`, ý nghĩa đầy đủ của command ID, encoding text,
+  heartbeat/reconnect và command xác thực account/session.
+- **Confirmed (form `0x2B`):** một caller UI kiểm tra chín text input bắt buộc,
+  gửi chúng dưới dạng chín string length-prefixed; response chỉ đọc một byte,
+  tạo/tái dùng object UI rồi gọi virtual slot `7`. Đã ánh xạ đủ chín control
+  sang localization ID và wire order, nhưng plaintext label chưa giải được.
+  `Inferred`: thuộc luồng onboarding/account/profile. Không coi là login cho
+  tới khi xác định màn hình trước đó và ý nghĩa label; xem
+  [m3-command-2b.md](../analysis/m3-command-2b.md).
 - **Unknown:** chuỗi IP ứng viên `14.225.206.44` trong metadata có được method
   kết nối dùng hay không. Không thấy tham chiếu `ldstr` tới chuỗi đó trong IL
   khôi phục, nhưng công cụ có thể bỏ sót hoặc chuỗi có thể được truyền gián tiếp.
@@ -112,6 +177,8 @@ máy khi cần, trước khi chuyển nhận định sang `Confirmed` về hành
 
 1. Đã lần caller `0x060001C1` tới mảng chọn host/port và nối worker nhận với collection được `FixedUpdate` xử lý; tiếp tục nối thao tác UI chọn endpoint với callback Unity và xác định điều kiện bàn giao trực tiếp/qua collection.
 2. Xác minh các nhánh framing, biến đổi byte và xử lý lỗi ở native.
-3. Liên kết state/tài nguyên với đăng nhập, lobby, phòng và trận.
-4. Lần đường hình học cục bộ tới cập nhật bản đồ/đối tượng và message,
-   rồi xác định nơi tính sát thương và thay đổi địa hình trước khi chốt M3.
+3. Tìm producer/source của `0xE2`, xác định byte `+0x2DD` và routine cuối
+   selector `0` của `0x9E` để chốt scene đích sau placement.
+4. Tìm đường gián tiếp gọi setter HP đích `0x0600044A`, xác định state khóa
+   và điều kiện runtime của entry `0x16/0x54`, rồi xác định server xác nhận,
+   phát lại hay ghi đè hit/HP/địa hình nào trước khi chốt M3.

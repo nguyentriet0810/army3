@@ -1,8 +1,10 @@
 # M3 — Hai entry message chia sẻ nhánh đọc mảng
 
 Phân tích tĩnh trên bản `GameAssembly.dll` đã hash ở M1. Không chạy
-client, không liên hệ server. Các byte dưới đây là byte điều phối
-**sau biến đổi trạng thái**, không chắc là byte thô trên TCP.
+client, không liên hệ server. Các byte dưới đây là byte điều phối logic
+**sau biến đổi trạng thái**. Khi biến đổi bật, raw byte được tính bằng
+`((logical + shift) mod 256) XOR key[recvIndex]`; vì vậy không có raw byte
+cố định cho `0x16/0x54` nếu chưa biết state của phiên.
 
 ## Liên kết từ bảng điều phối
 
@@ -103,13 +105,13 @@ metadata (Windows x64 ABI) là cần thiết vì ISIL khôi phục có vài tên
 biến tạm không nhất quán. Đây là ánh xạ mảng ngoài, không gán ý nghĩa
 cho bốn thành phần của payload.
 
-**Confirmed (consumer đã thấy):** một method của chính type chứa bốn
-field đọc `+0x48` và `+0x50`, lấy hai `short[]` theo cùng chỉ số rồi
-truyền chúng cho constructor của object hình học; xem
-[ranh giới mô phỏng](m3-simulation-boundary.md). Trong phần ISIL đã
-khôi phục của type này, chưa thấy lượt đọc tương ứng cho `+0x58` và
-`+0x60`. Đó chỉ là giới hạn của phép quét, **không** chứng minh hai
-field sau không được dùng.
+**Confirmed (consumer đã thấy):** method `0x06000B66` đọc cả bốn field
+`+0x48/+0x50/+0x58/+0x60` theo cùng chỉ số. A/B đi vào constructor và
+đường cấu hình object hình học `0x06000A42`; C/D đi vào `0x06000A43`.
+Khi byte loại của object bằng `0x30`, `0x06000A43` ghép C/D thành một
+`ArrayList` các point `(C[i], D[i])`. Sau đó `0x06000A62` duyệt danh
+sách này theo thứ tự và so tọa độ point với tọa độ hiện tại của object.
+Xem [đường tọa độ, sát thương và địa hình](m3-projectile-damage-terrain.md).
 
 **Confirmed (consumer tuần tự):** method `0x06000B66` kiểm tra chỉ số
 instance tại field `+0x68` với độ dài mảng ngoài ở `+0x48`. Khi còn
@@ -121,11 +123,12 @@ object. ISIL khôi phục cho thấy method `0x06000B65` và `0x06000B67`
 gọi consumer này; `0x060007C0` gọi `0x06000B67` trên một instance
 tĩnh khi instance đó tồn tại. Metadata cho thấy `0x060007C0` là
 `override` của một method trên base class trừu tượng; Ghidra ánh xạ
-nó tới `FUN_1802870F0` và hiện chỉ thấy hai data reference tới entry,
-không thấy code reference trực tiếp. Do đó việc quét IL không tìm thấy
-caller trực tiếp **không** chứng minh method không chạy: virtual
-dispatch hoặc IL bị khôi phục thiếu vẫn là khả năng. Chưa xác định
-caller thực tế hoặc tần suất thực thi.
+nó tới `FUN_1802870F0`. Native disassembly xác nhận direct call từ
+`0x060007C0` tới `0x06000B67` tại `0x180287C4E`, rồi từ
+`0x06000B67` tới consumer point/mask `0x06000A62` tại
+`0x180409CD6`. Entry override chỉ có data reference, phù hợp với khả
+năng được gọi qua virtual dispatch; vẫn chưa xác định chính xác nhịp
+Unity thực thi nó.
 
 **Confirmed (ngữ cảnh của override):** trong `0x060007C0`, trước lời
 gọi `0x06000B67` còn có một nhánh lấy `ArrayList.Count`, duyệt phần
@@ -137,13 +140,17 @@ tần suất của nó.
 
 ## Điều chưa biết
 
-- **Unknown:** tên message, ý nghĩa bốn mảng và vai trò của `0x16`
-  so với `0x54`. Không gọi chúng là map/quỹ đạo/sát thương.
+- **Unknown:** tên message, vai trò khác nhau của `0x16` so với `0x54`
+  và ngữ nghĩa gameplay chính xác của A/B. C/D là chuỗi point có thứ tự
+  ở mức cấu trúc và được suy luận là waypoint/path, nhưng chưa đủ bằng
+  chứng để gọi là quỹ đạo gameplay hay dữ liệu authoritative.
 - **Unknown:** các giá trị trong mảng là trạng thái có thẩm quyền từ
   server hay dữ liệu đầu vào để client tiếp tục mô phỏng. M3 vẫn chưa
   xác định được bên quyết định va chạm và sát thương.
-- **Unknown:** byte command thô trên TCP, điều kiện chọn case và
-  các nhánh còn lại trong handler.
+- **Confirmed (công thức), Unknown (giá trị phiên):** đã biết quan hệ giữa
+  raw command và `0x16/0x54`, nhưng chưa biết key, shift và recvIndex của một
+  phiên thực; điều kiện chọn case và các nhánh còn lại trong handler cũng
+  chưa rõ.
 
 ## Tái lập
 
@@ -164,11 +171,15 @@ Log Git-ignored: `handler-jumptable-stubs-script.log`,
 `case16-loop-control-script.log`, `case16-base-copy-script.log`,
 `case16-arith-helpers-script.log`, `case16-sub-helper-script.log`,
 `array-core.log` và `array-write-helper.log`. Cần tiếp tục xác định
-ý nghĩa byte chế độ/marker, giới hạn độ dài và nơi hai field sau được
-dùng. Quét caller bằng `scripts/inspect-il-calls.ps1` sinh các TSV
+ý nghĩa byte chế độ/marker và giới hạn độ dài. Quét caller bằng
+`scripts/inspect-il-calls.ps1` sinh các TSV
 Git-ignored `analysis/generated/m3/coordinate-consumer-callers.tsv`
 và `coordinate-main-consumer-callers.tsv`. Log Ghidra
 `coordinate-consumer-caller-script.log` chứa entry và xref của
 `FUN_1802870F0`; `coordinate-base-virtual-callers.tsv` cho thấy các
 override khác gọi base method, không phải call site đã xác nhận tới
 override `0x060007C0`.
+
+Các cạnh native tới consumer cuối được đối chiếu read-only bằng
+`InspectNativeTargets.java` và `InspectDecompileWindow.java`; địa chỉ
+call dương là `0x180287C4E` và `0x180409CD6`.

@@ -10,16 +10,25 @@ chung:
 | Byte lệnh | Handler | Hành vi đã thấy trong native | Ý nghĩa nghiệp vụ |
 | --- | --- | --- | --- |
 | `0xE5` | `FUN_1804E2E00` | Đọc dữ liệu message để dựng mảng khóa, byte dịch lệnh và bật cờ biến đổi | Inferred: thiết lập biến đổi; xem [báo cáo riêng](m3-byte-transform-state.md) |
-| `0xA9` | `FUN_1804E2920` | Đọc byte đầu làm nhánh con `0`, `1` hoặc `2` | Unknown |
+| `0xA9` | `FUN_1804E2920` | Đọc byte đầu làm nhánh con `0`, `1` hoặc `2` | Inferred: đồng bộ trạng thái transport/queue |
 | `0x83` | `FUN_1804E31B0` | Đọc các byte đầu, dùng byte thứ ba làm độ dài cho mảng dữ liệu tiếp theo; lưu mảng vào một field tĩnh khác | Unknown |
 
-`Confirmed` chi tiết cho `0xA9`: nhánh con `0` đặt cờ `+0xB1` của transport
-về `0`, rồi gọi đường đóng/reset `FUN_1804E09B0`; nhánh `1` đặt cờ này thành
-`1`, đọc một giá trị 4 byte theo thứ tự byte cao trước và bỏ qua thêm bốn
-byte, sau đó có thể gọi `FUN_1804DFDD0`; nhánh `2` đặt cờ `+0x61`, xóa hai
-bộ đếm `+0x90/+0x94` và thao tác trên một collection. Không đặt tên
-heartbeat/reconnect cho các nhánh này khi chưa xác định caller và ý nghĩa
-field.
+`Confirmed` chi tiết cho `0xA9`:
+
+- Client có thể tạo `0xA9` ở `FUN_1804E00C0`. Payload luôn bắt đầu bằng
+  subcommand; subcommand `0` còn ghi một giá trị length-prefixed từ field
+  phiên `+0x30`, rồi hai số 32-bit big-endian ở transport `+0x94/+0x90`.
+- Nhánh nhận `0` đặt cờ `+0xB1` về `0`, so chênh lệch thời gian với `501 ms`
+  để gọi callback với giá trị `1` hoặc `2`, rồi gọi đường đóng/reset
+  `FUN_1804E09B0`.
+- Nhánh nhận `1` đặt `+0xB1` thành `1`, xóa/duyệt collection, đọc một số
+  4-byte big-endian và bỏ qua thêm bốn byte. Nếu số đầu khác `+0x94`, nó
+  hiệu chỉnh theo số phần tử collection rồi có thể gọi `FUN_1804DFDD0`.
+- Nhánh nhận `2` đặt cờ `+0x61`, xóa hai bộ đếm `+0x90/+0x94` và gọi một
+  virtual method trên collection.
+
+`Inferred`: `0xA9` đồng bộ trạng thái hàng đợi/phiên của transport. Chưa đủ
+bằng chứng để đặt tên heartbeat, reconnect hoặc login cho từng nhánh.
 
 `Confirmed` cho `0x83`: handler đọc ít nhất ba byte điều khiển, dùng byte
 thứ ba để cấp phát và chép dữ liệu tiếp theo, lưu mảng vào class pointer
