@@ -163,12 +163,41 @@ disassembly của `GameAssembly.dll`. Không chạy client hoặc kết nối se
   cùng một giá trị; `0x060001F6` gọi nó theo lô từ năm mảng dữ liệu qua chuỗi
   `0x060007AF -> 0x060007EC -> 0x060001F6`. Chưa gắn được entry công khai
   `0x060007AF` với command mạng cụ thể.
+- **Confirmed (tọa độ selector `2`):** cả sáu direct call tới sender
+  `FUN_18031B0E0` đều lấy `x/y` từ selected/current entity phía client. Năm
+  call trong routine movement so current `+0x84/+0x88` với snapshot
+  `+0x1B2/+0x1B4`, gửi khi thay đổi rồi cập nhật snapshot; call còn lại gửi
+  mirror `+0x298/+0x29C` trên đường placement sau selector `0`.
+- **Confirmed (lọc self):** event chiều về thêm `entityKey`; handler tra entity
+  theo key và bỏ qua nếu object đó chính là selected/current entity, trước khi
+  đọc hai word tọa độ. Chỉ event của entity khác mới đi vào so sánh và state
+  correction.
+- **Confirmed (inventory writer):** quét toàn listing tìm sáu field tọa độ
+  `+0x84/+0x88`, `+0x1D0/+0x1D4`, `+0x298/+0x29C`, rồi đối chiếu toàn bộ
+  writer ứng viên với dispatcher. Không có inline write trong dispatcher; có
+  13 direct call-site hợp lệ tới tám writer entity. Chúng nối tới command
+  `0x15`, `0xC0`, `0x35`, `0x16/0x54`, `0x18`, `0x59`, `0xC1` và các
+  selector `0/2/10` của `0x9E`. Xem
+  [inventory writer tọa độ](m3-coordinate-writers.md).
+- **Confirmed (hydrate `0x16/0x54`):** method `FUN_180525DF0` lấy hai word
+  từ payload và đặt đồng thời current `+0x84/+0x88` cùng target
+  `+0x1D0/+0x1D4`, trước khi cấu hình các mảng A–D. Đây là state vị trí do
+  response cung cấp ở pha hydrate/config.
 
 ## Diễn giải và giới hạn
 
 - **Inferred:** client có xử lý hình học/toạ độ cục bộ. Một khả năng là
   định vị hoặc trình diễn đối tượng chuyển động, nhưng chưa phân biệt
   được hiển thị với luật mô phỏng có thẩm quyền.
+- **Strongly inferred:** riêng selector `0x9E/2` là publication tọa độ do
+  client tạo, sau đó server gắn `entityKey` và relay/state-replicate cho các
+  entity khác. Đây không phải bằng chứng cho authoritative correction của
+  chính sender. Server vẫn có thể validate, clamp, thay thế hoặc từ chối tọa
+  độ; logic đó không thể xác định từ client tĩnh.
+- **Inferred:** tổng hợp các command writer cho thấy mô hình lai: server
+  response có thể hydrate hoặc sửa vị trí, còn client tiến current về target,
+  xử lý collision/movement cục bộ và publish một phần tọa độ. Chưa đủ bằng
+  chứng để gắn nhãn toàn game là client-authoritative hay server-authoritative.
 - **Confirmed (cấu trúc):** entry `0x16/0x54` cùng vào
   `0x18022ADB0` và có đường đi tĩnh tới call site
   `0x18022D28F`. Đoạn code đọc giá trị 16-bit từ buffer message rồi

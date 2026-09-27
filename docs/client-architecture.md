@@ -46,9 +46,13 @@ caller 0x060001C1 hoặc caller nội bộ
 `0x0600028A` **có thể** liên quan đến thử lại kết nối, nhưng không đủ bằng
 chứng để gọi đó là reconnect. Handler message có thêm case byte `0x02`
 gọi đường đóng/reset rồi gọi caller yêu cầu kết nối `FUN_18043bea0`;
-xem [báo cáo dispatch](../analysis/m3-message-dispatch.md). Đây là
-ứng viên mở lại kết nối, chưa xác nhận điều kiện runtime. Chưa thấy
-bằng chứng xác nhận heartbeat.
+đây là đường reconnect trực tiếp đã xác nhận về control flow. Worker nhận khi
+kết thúc chỉ gọi callback trạng thái và reset, không tự mở socket mới. `0x9A`
+là ứng viên keepalive/no-op một chiều nhưng chưa có sender client hay watchdog;
+chi tiết ở [vòng đời kết nối](../analysis/m3-connection-lifecycle.md) và
+[báo cáo dispatch](../analysis/m3-message-dispatch.md). Điều kiện runtime để
+server phát `0x02` vẫn chưa biết. Chưa thấy bằng chứng xác nhận heartbeat hai
+chiều hoặc chu kỳ keepalive bắt buộc.
 
 Đối chiếu native cho thấy callback thứ nhất xử lý hàng đợi gửi qua `BinaryWriter`, callback thứ hai đọc message qua `BinaryReader`. Cả hai có lời gọi sleep `5`, nhưng chưa thể gọi đó là heartbeat. Chi tiết xem báo cáo transport native.
 
@@ -134,23 +138,64 @@ trong [báo cáo dispatch](../analysis/m3-message-dispatch.md). Hook
   trong ba cờ `+0x18A/+0x188/+0x189`. Barrier đủ ba cờ đặt `appReady`, gửi
   `0xDB` rồi xóa cờ. Xem
   [m3-length4-commands.md](../analysis/m3-length4-commands.md).
+- **Confirmed (handoff sau handshake):** handler đặc biệt `0xE5/A9` quay lại
+  receive-loop. Packet thường kế tiếp, gồm server `0xE2`, được bàn giao thẳng
+  hoặc qua queue `+0xA8`; `FixedUpdate` drain queue và gọi cùng app listener.
+  `0xA9/0` đóng/reset transport nên không thể đi tiếp tới `0xE2` trên cùng
+  socket; `/1` và `/2` có thể. Xem
+  [m3-session-bootstrap-transitions.md](../analysis/m3-session-bootstrap-transitions.md).
+- **Confirmed (client/session bootstrap):** sender `0xBB` ghi hai string và
+  một byte. Đường connect dùng UUID lưu trong PlayerPrefs làm string đầu;
+  response đọc bốn string, reset dword session/UI
+  `DAT_181454620+0x188`, ghi state `+0x198/+0x1A8/+0x190/+0x1A0`, đặt
+  `+0x18D=1` và thay row selector `1` của bảng `string[][]` từ hai thành bốn
+  mục. Branch không gọi callback UI.
+  Event UI sau đó mới kiểm tra `row.Length == 4` và có thể mở một panel
+  hai-mode, ba action. `Inferred`: đây là định danh/config và panel
+  account/session, không phải login username/password đã xác nhận.
+- **Confirmed (outbound đầu phiên):** đường connect enqueue `0xBB`, khởi động
+  thread kết nối rồi enqueue `0x07`; cả hai nằm trong FIFO outbound. Sau khi
+  socket sẵn sàng, `0xE5` được gọi thẳng xuống serializer, bỏ qua FIFO.
+  Response `0xE5` bật gate còn thiếu để send worker drain index `0`, nên wire
+  order client trên transport mới/reset là `0xE5 -> 0xBB -> 0x07`.
 - **Confirmed (bootstrap/UI):** UI event case `1` chỉ gửi `0x9E` selector `0`
   khi `appReady` đã bật. Response selector `0` đọc một record keyed gồm 19
   giá trị và một field tùy chọn gate bởi sentinel `-1`, hydrate nhiều object
   rồi có nhánh gọi routine chuyển UI. Hai số cuối là tọa độ `x/y`; client quét
-  grid theo `y`, có thể gửi tiếp `0x9E` selector `2`, và event selector `2`
-  đặt state correction khi tọa độ nhận được khác current coordinate. Consumer
-  update xử lý correction theo kiểu hybrid: di chuyển ngang từng tick qua
+  grid theo `y`, có thể gửi tiếp `0x9E` selector `2`. Cả sáu direct sender
+  selector `2` đã tìm được đều lấy tọa độ từ selected/current entity phía
+  client; event chiều về thêm `entityKey` và bị bỏ qua nếu key trỏ lại chính
+  selected/current entity. Chỉ entity khác mới đặt state correction khi tọa
+  độ nhận được khác current coordinate. Consumer update xử lý correction theo
+  kiểu hybrid: di chuyển ngang từng tick qua
   collision map, có đường căn `y` sau hội tụ và một bước micro-reconcile cho
   sai số mirror tối đa hai đơn vị; không phải teleport thuần. Xem
   [schema selector 0](../analysis/m3-command-9e-selector0.md) và
-  [đồng bộ selector 2](../analysis/m3-command-9e-selector2.md). Logic này làm
-  suy yếu tên main menu/lobby; scene đích hiện vẫn `Unknown`.
+  [đồng bộ selector 2](../analysis/m3-command-9e-selector2.md). Vai trò
+  transport được suy luận mạnh là client publication rồi server relay/state
+  replication; việc server có validate hoặc thay tọa độ hay không vẫn
+  `Unknown`. Logic placement làm
+  suy yếu tên main menu/lobby. Routine cuối tính camera theo current entity,
+  nên world/spatial gameplay là `Inferred`; lobby dạng world, phòng chờ hay
+  trận vẫn `Unknown`.
   Sender `0xC4` thuộc UI event case `2` với gate one-shot riêng, không có bằng
   chứng là bước tự động trong bootstrap.
-- **Unknown:** port thực tế ở mọi phiên, execution edge từ `0xE5/0xA9` tới
-  nguồn `0xE2`, ý nghĩa đầy đủ của command ID, encoding text,
-  heartbeat/reconnect và command xác thực account/session.
+- **Coordinate writer boundary:** toàn dispatcher không có inline write vào
+  sáu field current/target/mirror; 13 direct call-site hợp lệ đi qua tám
+  helper. Các đường này bao phủ command `0x15`, `0xC0`, `0x35`, `0x16/0x54`,
+  `0x18`, `0x59`, `0xC1` và `0x9E` selector `0/2/10`. `0x16/0x54` đặt
+  current + target trong cùng routine cấu hình mảng A–D; selector `10` dựng
+  một derived entity với current `x/y`. Kết quả cho thấy kiến trúc lai giữa
+  hydrate/correction từ response và movement/collision cục bộ. Xem
+  [inventory writer tọa độ](../analysis/m3-coordinate-writers.md).
+- **Unknown (ordering inbound):** response `0xBB` ghi static owner
+  `DAT_181454620`, còn readiness của `0xE2` nằm ở `DAT_1814545E8`. Không có
+  gate, direct call hay shared flag đã thấy để ép thứ tự. Local server có thể
+  chọn `0xBB -> 0xE2` để tuần tự hóa bootstrap, nhưng đó là lựa chọn
+  `Inferred` cần kiểm chứng.
+- **Unknown:** port thực tế ở mọi phiên, plaintext/tên chính xác của panel
+  account/session, ý nghĩa đầy đủ của command ID, encoding text, heartbeat
+  và command xác thực account.
 - **Confirmed (form `0x2B`):** một caller UI kiểm tra chín text input bắt buộc,
   gửi chúng dưới dạng chín string length-prefixed; response chỉ đọc một byte,
   tạo/tái dùng object UI rồi gọi virtual slot `7`. Đã ánh xạ đủ chín control
@@ -177,8 +222,8 @@ máy khi cần, trước khi chuyển nhận định sang `Confirmed` về hành
 
 1. Đã lần caller `0x060001C1` tới mảng chọn host/port và nối worker nhận với collection được `FixedUpdate` xử lý; tiếp tục nối thao tác UI chọn endpoint với callback Unity và xác định điều kiện bàn giao trực tiếp/qua collection.
 2. Xác minh các nhánh framing, biến đổi byte và xử lý lỗi ở native.
-3. Tìm producer/source của `0xE2`, xác định byte `+0x2DD` và routine cuối
-   selector `0` của `0x9E` để chốt scene đích sau placement.
+3. Xác nhận bằng capture thứ tự server response `0xBB`/`0xE2`, byte `+0x2DD`, và consumer
+   của global mode `10` để phân biệt lobby dạng world, phòng chờ và trận.
 4. Tìm đường gián tiếp gọi setter HP đích `0x0600044A`, xác định state khóa
    và điều kiện runtime của entry `0x16/0x54`, rồi xác định server xác nhận,
    phát lại hay ghi đè hit/HP/địa hình nào trước khi chốt M3.

@@ -114,10 +114,38 @@ Hai field cuối là tọa độ `x/y`; client có thể gửi selector `2`, cò
 selector `2` trả `entityKey + x/y` và đặt correction khi khác current state.
 Xem [schema selector 0](m3-command-9e-selector0.md) và
 [đồng bộ selector 2](m3-command-9e-selector2.md).
+
+Quét writer tọa độ đầy đủ còn nối selector `10` tới constructor của một
+derived entity, với hai word payload được ghi vào current `+0x84/+0x88`.
+Ngoài `0x9E`, các command `0x15`, `0xC0`, `0x35`, `0x16/0x54`, `0x18`,
+`0x59` và `0xC1` cũng có đường direct-call tới writer current/target/mirror.
+Xem [inventory writer tọa độ](m3-coordinate-writers.md); tên nghiệp vụ của
+phần lớn command này vẫn `Unknown`.
+
 Tên scene đích vẫn `Unknown`; suy luận main menu/lobby trước đây không còn đủ
 mạnh sau khi thấy logic grid/tọa độ.
 Control flow và các khoảng trống còn lại được ghi tại
 [m3-length4-commands.md](m3-length4-commands.md).
+
+## Session/config `0xBB` và đường tới `0xE2`
+
+`Confirmed`: sender `0xBB` ghi hai string và một byte. Một caller trong đường
+connect dùng UUID lưu ở PlayerPrefs làm string đầu. Response branch
+`0x1802430B8` đọc bốn string, ghi dword zero tại
+`DAT_181454620+0x188`, ghi hai kết quả split và hai string nguyên vào cùng
+state session/UI, đặt `+0x18D=1`, rồi thay row selector `1` của bảng
+`string[][]` từ hai thành bốn mục. Branch không gọi callback UI; event UI về
+sau mới kiểm tra `row.Length == 4` và có thể mở panel hai-mode/ba action.
+Ba readiness byte cùng offset mà cụm `0xE2` sử dụng thuộc static owner khác,
+`DAT_1814545E8`; do đó không có shared-state dependency đã xác nhận giữa hai
+handler. Ngữ nghĩa account authentication và thứ tự inbound `0xBB`/`0xE2`
+vẫn `Unknown`.
+
+`Confirmed`: `0xE5/A9` không gọi handler `0xE2`. Receive worker xử lý chúng
+riêng rồi tiếp tục đọc; packet server `0xE2` kế tiếp đi qua
+`FUN_1804E05E0`, trực tiếp hoặc queue `+0xA8`, tới listener/app dispatcher.
+`0xA9/0` đóng socket; `/1` và `/2` trở lại vòng đọc. Xem
+[m3-session-bootstrap-transitions.md](m3-session-bootstrap-transitions.md).
 
 ## Chứng cứ và bước tiếp theo
 

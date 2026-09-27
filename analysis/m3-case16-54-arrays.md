@@ -105,6 +105,42 @@ metadata (Windows x64 ABI) là cần thiết vì ISIL khôi phục có vài tên
 biến tạm không nhất quán. Đây là ánh xạ mảng ngoài, không gán ý nghĩa
 cho bốn thành phần của payload.
 
+## Tọa độ được đặt trong cùng method
+
+**Confirmed (cấu trúc):** `FUN_180525DF0` không chỉ chuyển bốn mảng vào
+consumer. Hai tham số `short` đứng trước byte loại và các mảng được ghi vào
+entity như sau:
+
+```text
+current +0x84/+0x88 = x/y
+target  +0x1D0/+0x1D4 = x/y
+snapshot +0x1B2 = x
+```
+
+CFG từ entry `0x180525DF0` đi tới các write-site này; đây không phải phần code
+liền kề bị Ghidra gộp nhầm. Tại caller `0x18022D28F`, hai giá trị đến từ các
+word đã đọc trong chính payload `0x16/0x54`. Method còn ghi một cặp tọa độ khác
+vào global state qua hai tham số cuối, nhưng chưa xác định vai trò của cặp đó.
+
+Vì vậy `0x16/0x54` là đường **hydrate/config có đặt vị trí ban đầu**, không chỉ
+là packet chứa bốn mảng hình học. Điều này vẫn chưa chứng minh server liên tục
+authoritative trong lúc di chuyển; nó chỉ xác nhận server response cung cấp
+state vị trí ở pha cấu hình này. Xem inventory tổng thể tại
+[writer tọa độ entity](m3-coordinate-writers.md).
+
+**Confirmed (sau lời gọi cấu hình):** handler so sánh hai object pointer ở
+state chung `+0x50` và `+0x60`. Nếu chúng bằng nhau, nó gọi `FUN_18026FA00`,
+đặt byte ở static state khác `+0x0A = 1`; nếu khác nhau thì thoát case. Chính
+byte này được `FixedUpdate -> FUN_1804E0740` kiểm tra: khi khác zero, hàm trả
+về mà chưa dispatch phần tử đầu queue `+0xA8`. Nhiều routine UI/game khác cũng
+bật/tắt byte này, nên alias thận trọng là `dispatchPause`, không phải
+`matchReady`.
+
+`Inferred`: handler có thể tạm dừng việc drain message trong lúc áp dụng state
+hình học cho object local/current. Không có scene load, map ID, turn seed hay
+roster transition ở đoạn ngay sau lời gọi cấu hình. Vì vậy `0x16/0x54` chưa
+được phân loại là command bắt đầu trận.
+
 **Confirmed (consumer đã thấy):** method `0x06000B66` đọc cả bốn field
 `+0x48/+0x50/+0x58/+0x60` theo cùng chỉ số. A/B đi vào constructor và
 đường cấu hình object hình học `0x06000A42`; C/D đi vào `0x06000A43`.
@@ -145,8 +181,9 @@ tần suất của nó.
   ở mức cấu trúc và được suy luận là waypoint/path, nhưng chưa đủ bằng
   chứng để gọi là quỹ đạo gameplay hay dữ liệu authoritative.
 - **Unknown:** các giá trị trong mảng là trạng thái có thẩm quyền từ
-  server hay dữ liệu đầu vào để client tiếp tục mô phỏng. M3 vẫn chưa
-  xác định được bên quyết định va chạm và sát thương.
+  server hay dữ liệu đầu vào để client tiếp tục mô phỏng. Hai word tọa độ
+  đầu vào đã xác nhận là state hydrate, nhưng M3 vẫn chưa xác định được bên
+  quyết định va chạm và sát thương trong lúc trận đấu diễn ra.
 - **Confirmed (công thức), Unknown (giá trị phiên):** đã biết quan hệ giữa
   raw command và `0x16/0x54`, nhưng chưa biết key, shift và recvIndex của một
   phiên thực; điều kiện chọn case và các nhánh còn lại trong handler cũng
@@ -183,3 +220,6 @@ override `0x060007C0`.
 Các cạnh native tới consumer cuối được đối chiếu read-only bằng
 `InspectNativeTargets.java` và `InspectDecompileWindow.java`; địa chỉ
 call dương là `0x180287C4E` và `0x180409CD6`.
+Đoạn sau cấu hình và cờ pause được ghi ở `m3-case16-post-config.log`,
+`m3-case16-post-config-helper.log`, `m3-case16-ready-flag.log` và
+`m3-dispatch-pause-writers.log`.

@@ -64,14 +64,39 @@ Vì vậy `Confirmed` về vai trò hình học: field 17/18 là tọa độ 2D,
 `x/y`. `Inferred`: đây là bước đặt vị trí spawn/placement hợp lệ trên grid;
 tên nghiệp vụ chính xác vẫn chưa khôi phục.
 
+## Nguồn tọa độ outbound
+
+`Confirmed`: sender `FUN_18031B0E0` có sáu direct code call site. Năm call
+site `0x180522EE5`, `0x18052315D`, `0x1805233AB`, `0x180523409` và
+`0x180523512` nằm trong `FUN_1805225D0`; routine này được `FUN_180414150` gọi
+với object do `FUN_180446E50()` trả về. Helper `FUN_180446E50()` lấy một byte
+chỉ số ở static `+0x31`, rồi trả phần tử tương ứng từ collection entity. Vì
+chưa khôi phục được tên gốc, tài liệu gọi đây là **selected/current entity**.
+
+Trong cả năm call site, cặp đưa lên wire là current coordinate của chính object
+đó tại `+0x84/+0x88`. Routine so current coordinate với snapshot
+`+0x1B2/+0x1B4`; tùy movement state, thay đổi `x` hoặc `x/y` sẽ kích hoạt send,
+sau đó snapshot tương ứng được cập nhật ngay. Một gate tĩnh `+0x110 == 0`
+cũng phải thỏa trước các đường gửi đã thấy.
+
+`Confirmed`: call site thứ sáu `0x1805259F4` nằm trong `FUN_180524E70`, là
+đường placement đã nối với selector `0`. Nó lấy selected/current entity qua cùng
+`FUN_180446E50()`, đọc mirror `+0x298/+0x29C` và gửi cặp đó. Như vậy cả sáu
+direct call site đã tìm được đều phát tọa độ hiện có trong state client; không
+call site nào gửi một yêu cầu để server tự tính vị trí.
+
+`Unknown`: hai data reference tới sender nằm trong bảng metadata/code pointer,
+chưa có execution edge chứng minh một indirect caller khác. Kết luận trên chỉ
+bao phủ sáu direct code call đã xác nhận.
+
 ## Xử lý response selector `2`
 
 Handler dùng `entityKey` để tra nhiều collection song song. Control flow đã
 xác nhận:
 
-1. Tra object theo `entityKey` và so identity với object do
-   `FUN_180446E50()` trả về. Nếu trùng, handler thoát sớm mà không đọc hai
-   word còn lại.
+1. Tra object theo `entityKey` và so identity với selected/current entity do
+   `FUN_180446E50()` trả về. Nếu trùng, handler thoát sớm **trước khi đọc** hai
+   word tọa độ còn lại.
 2. Nếu không trùng, đọc `x/y`, ghi chúng vào mirror `+0x298/+0x29C`.
 3. Đọc tọa độ hiện tại `+0x84/+0x88` của một object cùng key.
 4. Nếu cả hai bằng `x/y`, thoát ngay: không tạo correction.
@@ -138,20 +163,21 @@ chặn, và current được cập nhật từ các giá trị này. Đây là *
 đánh dấu một correction đang chờ hoàn tất. Chưa biết tên field gốc và chưa
 chứng minh mọi mode entity đi qua cùng các gate.
 
-## Vòng đồng bộ phát sinh từ selector `0`
+## Vòng publish/relay và nhánh phát sinh từ selector `0`
 
 Luồng tối thiểu đã xác nhận là:
 
 ```text
-server: 0x9E/0 (..., x, y)
-    ↓
-client: scan grid theo trục y, tạo yCandidate
-    ↓ (một đường hợp lệ)
-client: 0x9E/2 (x, yCandidate)
-    ↓
-server: 0x9E/2 (entityKey, xServer, yServer)
-    ↓
-client: nếu khác +0x84/+0x88 thì đặt state correction/target
+selected/current entity thay đổi vị trí
+    ├─ movement path: current +0x84/+0x88 khác snapshot
+    └─ placement path sau 0x9E/0: mirror +0x298/+0x29C
+                         ↓
+client -> server: 0x9E/2 (x, y)
+                         ↓
+server -> client: 0x9E/2 (entityKey, xServer, yServer)
+                         ↓
+recipient: nếu entityKey là selected/current entity thì bỏ qua
+           nếu là entity khác và tọa độ lệch thì đặt correction/target
 ```
 
 `Confirmed`: nhánh nhận selector `2` không gọi sender `FUN_18031B0E0` và
@@ -159,11 +185,22 @@ không gửi message khác. Vì vậy đây không phải vòng lặp đệ quy 
 nó kết thúc sau bước áp dụng/đặt correction. Những lần selector `2` tiếp theo
 chỉ có thể do event/gameplay khác kích hoạt sender.
 
-`Strongly inferred`: selector `2` là event đồng bộ/relay tọa độ entity. Các
-dấu hiệu gồm request không có key, response thêm `entityKey`, gate bỏ qua một
-object đang được chọn, so sánh current coordinate trước correction và cập
-nhật nhiều mirror theo key. Chưa đủ bằng chứng để khẳng định server hoàn toàn
-authoritative hay response luôn là echo cho chính request vừa gửi.
+`Strongly inferred`: vai trò transport của selector `2` là **client position
+publication rồi server relay/state replication cho các entity khác**, không
+phải kênh authoritative correction cho chính sender. Bằng chứng kết hợp là:
+
+- mọi direct sender đã biết lấy tọa độ từ selected/current entity phía client;
+- request không chứa key, còn event chiều về được server gắn `entityKey`;
+- recipient bỏ qua selected/current entity trước khi đọc tọa độ;
+- chỉ entity khác mới so current coordinate và đi vào correction;
+- nhánh nhận không tạo một request selector `2` mới.
+
+Tên `xServer/yServer` trong sơ đồ chỉ biểu thị giá trị nhận từ wire, không có
+nghĩa rằng server đã tự tính chúng. `Unknown`: server có thể kiểm tra, clamp,
+thay thế hoặc từ chối tọa độ trước khi phát lại; phân tích client tĩnh không
+thể chứng minh response là echo byte-for-byte hay server hoàn toàn không có
+thẩm quyền. Vì vậy đặc tả server cục bộ ban đầu có thể dùng mô hình relay
+`[2,x,y] -> [2,entityKey,x,y]`, nhưng phải giữ validation là một điểm mở.
 
 Phát hiện tọa độ/grid làm suy yếu suy luận cũ gán transition cuối selector
 `0` cho main menu/lobby. An toàn hơn là gọi nó **transition scene sau
@@ -183,6 +220,13 @@ hydrate entity và placement**; room, match hay gameplay scene vẫn `Unknown`.
 - `scripts/ghidra/FindProgramDisplacementAccesses.java`: tìm consumer của
   `+0x1D8/+0x168` trên toàn listing; kết quả được lọc lại theo cùng entity
   layout để tránh nhầm offset của type khác.
+- `analysis/generated/ghidra/selector2-authority-callers.log` và
+  `selector2-authority-producers.log`: sáu direct sender call site, nguồn
+  coordinate và snapshot write; đều bị Git ignore.
+- `analysis/generated/ghidra/selector2-update-loop.log`: caller lấy
+  selected/current entity rồi gọi routine chứa năm sender; bị Git ignore.
+- `analysis/generated/ghidra/selector2-self-filter.log`: lookup theo key, so
+  identity và nhánh bỏ qua self trước hai reader tọa độ; bị Git ignore.
 - `analysis/generated/ghidra/case9e-selector2-analysis.log`: log tổng hợp của
   các phép kiểm tra trên; file sinh tự động và bị Git ignore.
 - `analysis/generated/ghidra/coordinate-correction-analysis.log`: instruction

@@ -108,8 +108,10 @@ có consumer hoặc metadata đủ rõ.
   `0xE2` (`FUN_1801FCAB0`, nhánh `0x1802135A8`). Handler này so sánh ba cặp
   version/cache. Với cặp thứ hai ở static field `+0x2E8/+0x2EC`, mismatch gọi
   sender `0xE1`; match tải cache cục bộ rồi cũng đặt `+0x188 = 1`.
-- `Unknown`: tên nghiệp vụ của ba blob và nguồn gửi `0xE2`; chưa nối được
-  handler `0xE2` ngược về `0xE5/0xA9` bằng một execution edge tĩnh.
+- `Unknown`: tên nghiệp vụ của ba blob. Nguồn của `0xE2` là packet server,
+  nên không có direct call nội bộ từ handler `0xE5/0xA9`; execution edge qua
+  receive-loop và dispatcher chung đã được nối tại
+  [m3-session-bootstrap-transitions.md](m3-session-bootstrap-transitions.md).
 
 ## Bộ ba bootstrap do `0xE2` điều phối
 
@@ -174,11 +176,11 @@ sẵn sàng hơn là response mang dữ liệu.
   selector `2` trả `entityKey + x/y`, so với current position rồi đặt state
   correction khi khác. Nhánh nhận không gửi lại message, nên không tạo vòng
   đệ quy. Xem [m3-command-9e-selector2.md](m3-command-9e-selector2.md).
-- `Confirmed`: `FUN_180419570` xóa UI/state hiện tại, tính lại tọa độ dựa trên
-  kích thước màn hình, đặt một global state byte thành `10`, rồi gọi một chuỗi
-  helper dựng/chuyển UI. Sau phát hiện placement/grid, chỉ còn có thể gọi đây
-  là transition scene sau hydrate entity; main menu, lobby, room hay match
-  đều vẫn `Unknown`.
+- `Confirmed`: `FUN_180419570` xóa UI/state hiện tại, lấy current entity
+  `x/y`, tính camera/offset theo kích thước màn hình, đặt một global mode byte
+  thành `10`, rồi gọi một chuỗi helper dựng/chuyển UI. `Inferred`: đây là
+  transition tới world/spatial gameplay chứ không phải menu thuần. Lobby dạng
+  world, phòng chờ hay trận đang chạy vẫn chưa phân biệt được.
 - `Confirmed`: đường này do UI event case `1` kích hoạt, không tự chạy chỉ vì
   barrier ba cờ hoàn tất.
 
@@ -189,6 +191,19 @@ sẵn sàng hơn là response mang dữ liệu.
   đồng bộ tiếp. Xem
   [m3-byte-transform-state.md](m3-byte-transform-state.md) và
   [m3-special-messages.md](m3-special-messages.md).
+- `Confirmed`: sau handler đặc biệt, receive worker quay lại vòng đọc; packet
+  server `0xE2` kế tiếp đi qua `FUN_1804E05E0`, trực tiếp hoặc queue `+0xA8`,
+  rồi tới app dispatcher. `0xA9/0` đóng socket nên không thể đi tiếp tới
+  `0xE2` trên cùng phiên; `0xA9/1` và `/2` có thể.
+- `Confirmed`: request `0xBB` mang hai string và một byte; đường connect dùng
+  UUID lưu trong PlayerPrefs làm string đầu. Response đọc bốn string, ghi
+  dword zero tại `DAT_181454620+0x188`, lưu các cấu hình vào cùng state
+  session/UI, đặt `+0x18D=1` và thay row selector `1` của bảng `string[][]`
+  từ hai thành bốn mục. Response không gọi callback UI; event UI sau đó mới
+  tiêu thụ row bốn mục để mở một panel hai-mode, ba action. Ba readiness flag
+  của `0xE2` thuộc owner khác `DAT_1814545E8`, dù có cùng offset.
+  `Inferred`: đây là định danh/config phiên trước data bootstrap, không phải
+  login username/password đã xác nhận.
 - `Confirmed`: từ handler `0xE2` trở đi đã xác định được chuỗi bootstrap:
   ba nhánh cache/request `0xDA/0xE1/0xE0` hội tụ ở barrier ba cờ, barrier đặt
   `appReady` và gửi `0xDB`; một UI event sau đó có thể gửi `0x9E` selector `0`,
@@ -197,8 +212,16 @@ sẵn sàng hơn là response mang dữ liệu.
   bằng chứng thuộc chuỗi tự động trên.
 - `Inferred`: state chắc chắn nhất ngay sau `0xE5` là **transport transformed /
   synchronization pending hoặc ready**, chưa phải login hay lobby.
-- `Unknown`: execution edge từ `0xE5/0xA9` tới nguồn `0xE2`, ý nghĩa byte
-  `+0x2DD`, tên màn hình cuối, và command xác thực account/session. Command
+- `Confirmed`: trên transport mới/reset, `0xE5` được gửi trực tiếp; response
+  của nó mở gate để FIFO drain `0xBB` rồi `0x07`, nên outbound client là
+  `0xE5 -> 0xBB -> 0x07`.
+- `Unknown`: client không có gate, direct call hay shared flag đã thấy để ép
+  thứ tự inbound response `0xBB` và server `0xE2`. Local server nên chọn
+  `0xBB -> 0xE2` để lifecycle tuần tự, nhưng đây là quyết định triển khai cần
+  kiểm chứng chứ chưa phải protocol fact.
+- `Unknown`: ý nghĩa byte `+0x2DD`, plaintext/tên chính xác của panel
+  account/session, tên màn hình cuối, và command xác thực account.
+  Command
   `0x2B` đã được tách thành form chín trường nhưng chưa đủ bằng chứng gọi là
   login; xem [m3-command-2b.md](m3-command-2b.md).
 

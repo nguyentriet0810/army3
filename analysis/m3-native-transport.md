@@ -47,7 +47,8 @@ có đường ghi đè trước kết nối; xem [báo cáo endpoint](m3-endpoin
   theo, rồi tạo object message. Do đó callback thứ hai là đường **nhận** ở mức
   cấu trúc.
 - Worker nhận có nhánh riêng cho `0xE5`, `0xA9`, `0x83`; `0x9A` chỉ được
-  loại khỏi một bộ đếm trong parser đã thấy. Xem
+  loại khỏi một bộ đếm trong parser đã thấy. Quét toàn bộ direct sender không
+  thấy client tạo `0x9A`; xem
   [các nhánh message đặc biệt](m3-special-messages.md); không đặt tên
   heartbeat khi chưa có chứng cứ.
 - Đường nhận có một nhánh đọc bốn byte độ dài và nhánh thường đọc hai byte.
@@ -56,21 +57,51 @@ có đường ghi đè trước kết nối; xem [báo cáo endpoint](m3-endpoin
 - Cả hai worker có lời gọi sleep `5` trong nhánh lặp. Chưa chứng minh đây là
   chu kỳ heartbeat; chỉ là chờ khi không có việc hoặc sau xử lý.
 
+### FIFO outbound và `0xE5` gửi trực tiếp
+
+`Confirmed`:
+
+- Method interface gửi message ánh xạ tới `FUN_1804DFC50`; hàm này thêm
+  message vào collection outbound `+0x38` qua helper có monitor/lock.
+- Send worker `FUN_1804E2520` chỉ drain khi connection `+0x30` và hai gate
+  `+0x60/+0x61` đều bật. Worker lấy index `0`, xóa index `0`, rồi gọi
+  `FUN_1804E02F0`, nên collection có semantics FIFO.
+- Initializer `FUN_1804E1620` tạo singleton/collection và đặt `+0x61 = 1`.
+  Gate `+0x60` của instance mới bằng `0`; handler response `0xE5`
+  `FUN_1804E2E00` đặt nó thành `1` sau khi cài key/shift.
+- Connect path enqueue `0xBB` trước khi khởi động thread kết nối và enqueue
+  `0x07` sau đó. Khi socket sẵn sàng, `FUN_1804DF5A0` gửi `0xE5` bằng lời gọi
+  trực tiếp tới `FUN_1804E02F0`, không qua FIFO.
+
+Vì vậy trên một kết nối mới/reset, thứ tự outbound phía client là
+`0xE5 -> 0xBB -> 0x07`. Server phải trả `0xE5` trước thì FIFO thường mới được
+drain. Client không có gate cục bộ chờ response `0xBB`. State UI/session của
+`0xBB` và cache barrier của `0xE2` thuộc hai static owner khác nhau, nên cũng
+không có shared-state dependency đã xác nhận; thứ tự inbound vẫn `Unknown`.
+
 Chi tiết nhánh độ dài 2/4 byte và phép XOR có chỉ số riêng mỗi chiều được ghi
 trong [báo cáo khung packet](m3-packet-framing.md); chưa có test vector để
 xác nhận codec với client. Đã lần message `0xE5` tới việc dựng khóa/bật cờ và
 đường reset; xem [trạng thái biến đổi byte](m3-byte-transform-state.md).
 
-`Unknown`: giá trị endpoint thực tế ở mọi phiên, thời điểm nhận `0xE5`, khóa thực tế, thứ tự chính xác
-mọi nhánh framing, giới hạn payload, bảng command ID, ngữ nghĩa message,
-reconnect, state chuyển màn hình và quyền mô phỏng trận. Chưa có test vector
+Đường kết thúc worker nhận đã được tách khỏi reconnect: worker báo callback
+`1/2`, reset state nhưng không tự gọi đường mở socket; case ứng dụng `0x02`
+mới thực hiện đóng/reset rồi kết nối lại. Xem
+[vòng đời kết nối](m3-connection-lifecycle.md).
+
+`Unknown`: giá trị endpoint thực tế ở mọi phiên, khóa thực tế, thứ tự chính xác
+mọi nhánh framing, giới hạn payload, thứ tự server response `0xBB`/`0xE2`
+đã quan sát thực tế,
+bảng command ID, ngữ nghĩa message,
+điều kiện server phát `0x02`, state chuyển màn hình và quyền mô phỏng trận. Chưa có test vector
 vì không có capture hợp lệ và chưa kiểm chứng codec với client cô lập.
 
 ## Bước tiếp theo của M3
 
 1. Đã lần endpoint tới callback của mục chọn trong client; tiếp tục nối với
    scene/callback Unity và kiểm tra đầu vào người dùng thực tế.
-2. Kiểm tra chéo endian và các nhánh lỗi của parser; tìm message lifecycle
-   sau `0xE5` trước khi viết codec.
+2. Kiểm tra chéo endian và các nhánh lỗi của parser; xác định bằng capture
+   hoặc localhost test thứ tự response `0xBB`/server `0xE2` trước khi chốt
+   bootstrap server.
 3. Lần type trạng thái phòng/trận và hàm tính toán để kết luận ranh giới
    mô phỏng trước khi chốt M3 hoặc triển khai server.

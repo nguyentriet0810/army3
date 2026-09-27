@@ -42,6 +42,9 @@ thời điểm component main loop được gắn vào scene.
    vào virtual method `+0x308` của `ArrayList` bên trong. Nhánh khác gọi
    helper `FUN_180004250` qua field transport `+0x20`. Điều kiện chọn
    hai nhánh này chưa được xác định chắc chắn.
+5. Trước khi dispatch phần tử đầu, `FUN_1804e0740` kiểm tra byte state
+   `DAT_181454940 + 0x0A`; nếu byte khác zero, nó trả về và giữ message trong
+   queue. Alias mô tả dùng trong tài liệu là `dispatchPause`.
 
 `Inferred`: virtual method `+0x308` là thao tác thêm phần tử, còn nhánh
 `FixedUpdate` tiêu thụ hàng đợi sự kiện/message. Đường worker nhận →
@@ -50,6 +53,12 @@ mọi message đều đi qua collection: một nhánh có thể dispatch trực 
 Chưa biết callback hoặc message nào được xử lý, và chưa chứng minh việc
 tiêu thụ xảy ra trong mọi trạng thái màn hình. Không coi đây là bằng
 chứng cho login, heartbeat hay quyền mô phỏng trận.
+
+`Confirmed`: sau khi command `0x16/0x54` hydrate tọa độ và bốn mảng hình học,
+một nhánh có thể đặt `dispatchPause = 1` khi hai object pointer state
+`+0x50/+0x60` bằng nhau. Nhiều routine UI/game khác cũng bật hoặc xóa byte
+này, vì vậy nó là gate tạm thời của Unity-side dispatch, không phải flag
+`matchReady`. Xem [m3-case16-54-arrays.md](m3-case16-54-arrays.md).
 
 ## Điểm vào xử lý message cấp ứng dụng
 
@@ -82,6 +91,8 @@ xem [m3-message-dispatch.md](m3-message-dispatch.md).
   `InspectNativeTargets.java` trên các địa chỉ `1804E0790`,
   `1804FF7F3`, `180425F30`, `180004250`, `1804E05E0` với
   `-process GameAssembly.dll -noanalysis -readOnly`.
+- Gate `dispatchPause`: `analysis/generated/ghidra/m3-case16-ready-flag.log`
+  và `m3-dispatch-pause-writers.log`.
 
 Cpp2IL có placeholder và `NoteDecompilerIssue`; Ghidra project mới phân
 tích từng phần. Vì thế các nhánh điều kiện và ý nghĩa nghiệp vụ còn phải

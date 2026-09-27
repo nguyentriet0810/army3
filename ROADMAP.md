@@ -157,6 +157,14 @@ và chưa lộ đường gửi. Cả 11 computed call native của consumer đã
 phân loại thành hai sibling override và chín thao tác collection; không
 call nào trực tiếp là enqueue/worker/serializer. Xem
 `analysis/m3-virtual-dispatch.md`.
+Quét toàn bộ writer của sáu field tọa độ entity đã hoàn tất ở mức direct
+dispatcher: không có inline write; 13 direct call-site hợp lệ đi qua tám
+helper và được nối tới command `0x15`, `0xC0`, `0x35`, `0x16/0x54`, `0x18`,
+`0x59`, `0xC1`, cùng selector `0/2/10` của `0x9E`. `0x16/0x54` vừa cấu hình
+mảng A–D vừa đặt current/target từ payload; selector `10` dựng derived entity
+với current `x/y`. Kết quả nghiêng về mô hình lai server hydrate/correction và
+client movement/collision, nhưng policy thẩm quyền chính xác vẫn chưa biết.
+Xem `analysis/m3-coordinate-writers.md`.
 Đã xác định một đường update projectile kiểm tra vùng chồng lấn với player,
 trừ damage khỏi HP hiện tại và xử lý nhánh HP về 0. Đường
 `0x06000A62 -> 0x0600080B -> 0x060005B8` còn áp stamp ảnh vào `int[]` mask
@@ -189,14 +197,34 @@ hai số cuối là tọa độ `x/y`. Client quét grid theo `y` rồi có th�
 `0x9E/2`; event selector `2` mang `entityKey + x/y`, so current coordinate và
 đặt correction khi khác. Consumer đã xác nhận correction là hybrid: bước ngang
 theo tick có collision check, có thể snap `y` sau hội tụ và micro-reconcile sai
-số mirror nhỏ; không phải teleport thuần. Nhánh nhận không gửi lại, nên đây
-không phải vòng đệ quy. Logic placement làm suy yếu tên main menu/lobby;
-scene đích vẫn chưa biết, và chưa nối được
-nguồn `0xE2` ngược về `0xE5/0xA9`. `0xC4` thuộc UI event case `2` có gate
-one-shot riêng, không có bằng chứng thuộc chuỗi bootstrap tự động. Xem
+số mirror nhỏ; không phải teleport thuần. Cả sáu direct sender đã tìm được đều
+lấy tọa độ từ selected/current entity phía client; event chiều về bỏ qua chính
+entity này trước khi đọc `x/y` và chỉ reconcile entity khác. Do đó vai trò
+transport được suy luận mạnh là client publication rồi server relay/state
+replication, không phải authoritative self-correction. Server có validate,
+clamp hoặc thay tọa độ hay không vẫn `Unknown`. Nhánh nhận không gửi lại, nên
+đây không phải vòng đệ quy. Logic placement làm suy yếu tên main menu/lobby;
+scene đích vẫn chưa biết. Đã nối ranh giới `0xE5/A9 -> 0xE2`: handler đặc
+biệt quay lại receive-loop, packet server `0xE2` kế tiếp đi qua direct/queued
+app dispatch; `0xA9/0` đóng socket nên không thể đi tiếp cùng phiên. Đường
+connect còn gửi `0xBB` gồm UUID/config/byte; response đọc bốn string, reset
+dword UI/session `DAT_181454620+0x188`, ghi config state và bật `+0x18D`.
+Đây là bước client/session identity/config được suy luận, chưa phải account
+login đã xác nhận. Đã chốt thứ tự outbound của kết nối mới/reset: connect path
+enqueue `0xBB`, khởi động thread rồi enqueue `0x07`; `0xE5` được gửi trực tiếp
+và response của nó mở gate để FIFO drain, nên wire order phía client là
+`0xE5 -> 0xBB -> 0x07`. Thứ tự server response `0xBB` so với server `0xE2`
+vẫn `Unknown`: không có gate, direct call hay shared flag đã thấy; readiness
+của `0xE2` thuộc static owner khác `DAT_1814545E8`. Local server có thể thử
+`0xBB -> 0xE2` để lifecycle tuần tự nhưng phải giữ nhãn `Inferred`. Response
+`0xBB` cũng không gọi callback UI; nó thay menu row selector `1` từ hai thành bốn mục.
+Event UI về sau mới mở panel hai-mode, ba action, được phân loại là
+account/session `Inferred`. `0xC4` thuộc UI event case `2` có gate one-shot
+riêng, không có bằng chứng thuộc chuỗi bootstrap tự động. Xem
 `analysis/m3-length4-commands.md` và
 `analysis/m3-command-9e-selector0.md` cùng
-`analysis/m3-command-9e-selector2.md`.
+`analysis/m3-command-9e-selector2.md` và
+`analysis/m3-session-bootstrap-transitions.md`.
 Đã lần thêm command `0x2B`: caller UI yêu cầu đủ chín text input, sender ghi
 chín string length-prefixed và response chỉ đọc một byte trước khi tạo/tái
 dùng object UI rồi gọi virtual slot `7`. Đã ánh xạ đủ chín control sang
@@ -208,6 +236,12 @@ Chưa nối được đường hit/HP tới command
 message hoặc xác định server có xác nhận/ghi đè kết quả; xem
 `analysis/m3-projectile-damage-terrain.md` và
 `analysis/m3-simulation-boundary.md`.
+Đã tách vòng đời mất kết nối khỏi reconnect: worker nhận khi dừng chỉ gọi
+callback `1/2` theo ngưỡng 501 ms rồi reset state, không tự mở socket; case
+ứng dụng `0x02` mới đóng/reset rồi gọi lại đường kết nối. Quét 128 direct
+sender không thấy client tạo `0x9A`; byte này đi vào nhánh mặc định nên hiện
+chỉ là ứng viên keepalive/no-op server → client, chưa có chu kỳ hay watchdog
+được xác nhận. Xem `analysis/m3-connection-lifecycle.md`.
 State machine, ngữ nghĩa packet
 và ranh giới thẩm quyền mô phỏng vẫn chưa xác định; xem
 `docs/client-architecture.md` và `docs/client-state-machine.md`.
@@ -221,11 +255,11 @@ kết nối server.
 
 - [ ] Xác định điểm khởi tạo ứng dụng và các manager chính.
 - [ ] Lập sơ đồ trạng thái: khởi động, đăng nhập, chọn server, lobby, phòng, trận.
-- [ ] Xác định lớp socket/transport và cơ chế reconnect hoặc heartbeat.
-- [ ] Xác định lớp encode/decode packet và bảng command/message ID.
+- [x] Xác định lớp socket/transport và cơ chế reconnect hoặc heartbeat.
+- [x] Xác định lớp encode/decode packet và bảng command/message ID.
 - [ ] Xác định dữ liệu nào được tải từ asset cục bộ và dữ liệu nào do server gửi.
-- [ ] Xác định vị trí tính vật lý, quỹ đạo, sát thương và thay đổi địa hình.
-- [ ] Phân loại từng kết luận thành `Confirmed`, `Inferred` hoặc `Unknown`.
+- [x] Xác định vị trí tính vật lý, quỹ đạo, sát thương và thay đổi địa hình.
+- [x] Phân loại từng kết luận thành `Confirmed`, `Inferred` hoặc `Unknown`.
 
 ### Đầu ra
 

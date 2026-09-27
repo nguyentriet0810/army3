@@ -36,8 +36,11 @@ thứ ba để cấp phát và chép dữ liệu tiếp theo, lưu mảng vào c
 qua `FUN_1804DFFE0`. Cấu trúc payload và mục đích chưa xác định.
 
 `0x9A` được loại khỏi một bộ đếm trong parser nhưng worker không có nhánh
-riêng cho nó trong đoạn decompile đã thấy; không suy ra nó tương đương ba
-byte lệnh trên.
+riêng; entry ứng dụng của nó còn đi thẳng về nhánh mặc định. Quét đủ 128
+direct call-site của constructor message chuẩn không tìm thấy sender `0x9A`.
+Đây là ứng viên no-op/keepalive một chiều từ server, nhưng vẫn chỉ `Inferred`:
+chưa có chu kỳ, watchdog hay phản hồi client để xác nhận heartbeat. Xem
+[vòng đời kết nối](m3-connection-lifecycle.md).
 
 Chứng cứ: `analysis/generated/ghidra/native-workers.log` và
 `analysis/generated/ghidra/transport-special-messages.log`, tạo bằng
