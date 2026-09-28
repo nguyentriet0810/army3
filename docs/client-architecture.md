@@ -151,8 +151,10 @@ trong [báo cáo dispatch](../analysis/m3-message-dispatch.md). Hook
   `+0x18D=1` và thay row selector `1` của bảng `string[][]` từ hai thành bốn
   mục. Branch không gọi callback UI.
   Event UI sau đó mới kiểm tra `row.Length == 4` và có thể mở một panel
-  hai-mode, ba action. `Inferred`: đây là định danh/config và panel
-  account/session, không phải login username/password đã xác nhận.
+  hai-mode, ba action. Action submit yêu cầu hai text khác rỗng, đóng panel
+  rồi gửi lại `0xBB(text38, text30, mode)`. Control flow account/session này
+  là `Confirmed`; plaintext label và việc hai field có đúng là username/
+  password vẫn `Unknown`.
 - **Confirmed (outbound đầu phiên):** đường connect enqueue `0xBB`, khởi động
   thread kết nối rồi enqueue `0x07`; cả hai nằm trong FIFO outbound. Sau khi
   socket sẵn sàng, `0xE5` được gọi thẳng xuống serializer, bỏ qua FIFO.
@@ -194,8 +196,8 @@ trong [báo cáo dispatch](../analysis/m3-message-dispatch.md). Hook
   chọn `0xBB -> 0xE2` để tuần tự hóa bootstrap, nhưng đó là lựa chọn
   `Inferred` cần kiểm chứng.
 - **Unknown:** port thực tế ở mọi phiên, plaintext/tên chính xác của panel
-  account/session, ý nghĩa đầy đủ của command ID, encoding text, heartbeat
-  và command xác thực account.
+  account/session, ý nghĩa đầy đủ của command ID, heartbeat và auth semantic
+  của response `0xBB`.
 - **Confirmed (form `0x2B`):** một caller UI kiểm tra chín text input bắt buộc,
   gửi chúng dưới dạng chín string length-prefixed; response chỉ đọc một byte,
   tạo/tái dùng object UI rồi gọi virtual slot `7`. Đã ánh xạ đủ chín control
@@ -203,9 +205,15 @@ trong [báo cáo dispatch](../analysis/m3-message-dispatch.md). Hook
   `Inferred`: thuộc luồng onboarding/account/profile. Không coi là login cho
   tới khi xác định màn hình trước đó và ý nghĩa label; xem
   [m3-command-2b.md](../analysis/m3-command-2b.md).
-- **Unknown:** chuỗi IP ứng viên `14.225.206.44` trong metadata có được method
-  kết nối dùng hay không. Không thấy tham chiếu `ldstr` tới chuỗi đó trong IL
-  khôi phục, nhưng công cụ có thể bỏ sót hoặc chuỗi có thể được truyền gián tiếp.
+- **Inferred mạnh:** host source của đường chọn server là byte array UTF-8 dài
+  13; metadata chỉ có một chuỗi ASCII dài 13 phù hợp là `14.225.206.44` tại
+  byte offset `6469992`. Chưa có mapping field-RVA cuối cùng để nâng thành
+  `Confirmed`. Một patch cùng độ dài thành `127.000.000.1` trên bản sao là
+  chiến lược M6; xem [báo cáo endpoint](../analysis/m3-endpoint-state.md).
+
+Fixture handshake identity, response `0xBB` và bootstrap collection rỗng đến
+mốc `0xDB` được tổng hợp ở
+[đường local login](../analysis/m3-local-login-path.md).
 
 ## Giới hạn của IL recovery
 

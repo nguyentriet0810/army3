@@ -77,6 +77,10 @@ nhiều nhánh chưa đủ tên nghiệp vụ.
   và `length & 0xff`, sau đó biến đổi từng byte payload trước khi ghi. Nhánh
   không biến đổi gọi virtual write với `length & 0xffff`; chưa xác nhận
   endianness của overload đó từ mã native đã trích.
+- Nếu writer payload có length `0`, `FUN_1802FFCD0` trả null và serializer vẫn
+  ghi length zero. Khi transform tắt nó gọi overload ghi giá trị `0`; khi
+  transform bật nó ghi hai byte zero qua helper XOR. Vì vậy request rỗng vẫn
+  là một frame có command và length, không phải command đơn lẻ.
 - `FUN_1804E04F0` cũng XOR với mảng khóa field `+0x68`, nhưng dùng chỉ số
   gửi riêng tại `+0x72`. Hai chỉ số gửi/nhận không được dùng lẫn nhau.
 
@@ -85,15 +89,20 @@ command rồi XOR qua `FUN_1804E04F0`. Khi payload có dữ liệu và biến đ
 thứ tự key gửi cũng là command, hai byte length cao/thấp, rồi từng byte
 payload. Chỉ số gửi bắt đầu từ field `+0x72`, độc lập với chỉ số nhận.
 
+Fixture local có thể chọn response `0xE5` với `N=1`, seed `00`, shift `00`.
+Prefix-XOR key khi đó là `00`, nên transform là identity nhưng gate/state vẫn
+được bật đúng đường. Vector đầy đủ và giới hạn của lựa chọn này ở
+[m3-local-login-path.md](m3-local-login-path.md).
+
 ## Giới hạn trước khi viết codec
 
 Đây **chưa phải đặc tả giao thức**. Đường nhận `0xE5` có logic thiết lập
 khóa và bật cờ; xem [trạng thái biến đổi byte](m3-byte-transform-state.md).
 Chưa xác nhận: giá trị khóa/shift thực tế của một phiên; endianness đầy đủ ở mọi nhánh; giới hạn
-độ dài; trường hợp payload rỗng; ý nghĩa byte lệnh; quan hệ giữa frame
-4-byte nhận và frame phía gửi;
-các nhánh lỗi/truncated stream. Không có test vector hợp lệ, nên chưa nên
-triển khai codec như một hành vi đã xác nhận với client.
+độ dài; ý nghĩa byte lệnh; quan hệ giữa frame
+4-byte nhận và frame phía gửi; các nhánh lỗi/truncated stream. Chưa có capture
+runtime hợp lệ; fixture tối thiểu hiện tại được suy ra từ mã tĩnh, nên cần giữ
+nhãn `Inferred` cho tới khi kiểm chứng với client cô lập.
 
 ## Chứng cứ tái lập
 

@@ -67,7 +67,11 @@ sẵn sàng, không phải response được client tự tạo từ handler `0xE
   sau đó gọi sender `0xBB` với UUID, một chuỗi cấu hình/localized khác và byte
   `1`.
 - Cùng sender còn có caller UI `FUN_180459240`, lấy hai text từ control và
-  một byte state. Ý nghĩa đường UI này vẫn chưa rõ.
+  một byte mode. Caller này đã được nối tới action submit `0x232B` của panel:
+  nó yêu cầu cả hai text khác rỗng, đóng state panel hiện tại, rồi gửi
+  `[textControl38][textControl30][mode]`. Vì label chưa được giải plaintext,
+  tên username/password vẫn `Unknown`, nhưng đây là submit thật của panel
+  account/session chứ không còn chỉ là candidate theo tên.
 - Sau khi yêu cầu mở kết nối, `FUN_18043BEA0` còn tạo command rỗng `0x07`.
   Response `0x07` về nhánh default của app dispatcher, nên đây là message một
   chiều trong phạm vi handler đã khảo sát.
@@ -98,10 +102,12 @@ native code cho thấy chúng có hai type-info slot và hai vùng static fields
 riêng. Response không có status success/failure đã thấy và không có lời gọi
 thẳng sang handler `0xE2` hoặc callback UI.
 
-`Inferred`: `0xBB` là bootstrap định danh client/installation và cấu hình
-phiên hoặc menu trước khi tải dữ liệu ứng dụng. Không gọi nó là username/
-password login. `Unknown`: string thứ hai, bốn string response, delimiter
-thực tế và plaintext của bốn lựa chọn menu.
+`Inferred`: lần `0xBB` đầu là bootstrap định danh client/installation và cấu
+hình phiên hoặc menu trước khi tải dữ liệu ứng dụng. Các lần sau từ panel là
+đường submit account/session đã xác nhận về control flow. Không gọi hai field
+là username/password khi chưa có plaintext label. `Unknown`: string thứ hai
+của lần connect, ngữ nghĩa bốn string response, delimiter thực tế và plaintext
+của bốn lựa chọn menu.
 
 ## Consumer UI sau response `0xBB`
 
@@ -116,6 +122,9 @@ thực tế và plaintext của bốn lựa chọn menu.
   panel có ba action/widget;
 - không routine nào trong chuỗi này gửi `0xE2`; việc mở panel là hậu quả của
   một event UI về sau, không phải callback đồng bộ từ response `0xBB`.
+- action submit `0x232B` kiểm tra hai text, xóa state panel `+0xA0` trước khi
+  gọi `FUN_1803151B0(text38, text30, mode)`. Vì vậy client đóng form trước khi
+  nhận response; local server không cần một status byte riêng để đóng form.
 
 Do các nhãn localization chưa được giải ra plaintext, tên màn hình chính xác
 vẫn `Unknown`. Cấu trúc và vị trí trước data bootstrap cho phép gọi nó là
@@ -171,7 +180,7 @@ có thể nâng thứ tự này lên `Confirmed`.
 | Client/session identity | `0xBB` mang UUID/config/byte; response reset dword session/UI `DAT_181454620+0x188`, nạp bốn string, bật `+0x18D` và thay menu row `1` từ 2 thành 4 mục | Cấu trúc `Confirmed`; tên nghiệp vụ `Inferred` |
 | Panel account/session | Event UI về sau kiểm tra row `1` có 4 mục rồi mở panel hai-mode, ba action; response `0xBB` không tự gọi callback | Cấu trúc `Confirmed`; tên màn hình `Inferred` |
 | Data bootstrap | server `0xE2` điều phối cache hoặc `0xDA/0xE1/0xE0`; barrier gửi `0xDB` | `Confirmed` |
-| Account authentication | Chưa có command với schema credentials + response success/failure được nối chắc chắn | `Unknown` |
+| Account/session submit | Panel hai field gửi `0xBB(text38, text30, mode)` sau khi đóng form; response cùng command đọc bốn string, không có status byte | Control flow `Confirmed`; tên field và auth semantic `Unknown` |
 | Lobby | Chưa có transition hoặc model danh sách phòng đã định danh | `Unknown` |
 | Room | Chưa có create/join/leave và room-state command đã định danh | `Unknown` |
 | Spatial world/gameplay | `0x9E/0` hydrate entity/tọa độ, chạy grid placement, tính camera theo entity và đặt global mode `10` | Control flow `Confirmed`; world/gameplay `Inferred` |
@@ -209,6 +218,11 @@ thể đưa sang M4 trước là partial order:
 7. `0x9E/0` là request do UI phát sinh sau `appReady`, không phải bước tự động
    của transport.
 
+Fixture response tối thiểu cho handshake và ba parser `0xDA/0xE1/0xE0` được
+chốt tại [m3-local-login-path.md](m3-local-login-path.md). Runtime cô lập đã
+xác nhận client nhận, parse và ghi các cache rỗng này, nhưng chưa đi đến
+`0xDB`; do đó phần còn lại của đường barrier vẫn là `Unknown` về runtime.
+
 ## Chứng cứ tái lập
 
 - `analysis/generated/ghidra/m3-bootstrap-transition-targets.log`: receive
@@ -226,6 +240,8 @@ thể đưa sang M4 trước là partial order:
 - `scripts/ghidra/InspectNativeTargets.java` với target
   `1801A4360/180458420`: wrapper mode và routine dựng panel; chạy read-only
   trên project Ghidra đã có.
+- `scripts/ghidra/DumpDecompile.java` với target `180459240/1803151B0`:
+  action submit, thứ tự hai text và mode của request `0xBB`.
 - `analysis/generated/ghidra/e1-ready-consumers.log`: barrier đọc đủ ba byte
   readiness từ static owner `DAT_1814545E8`, gửi `0xDB` rồi xóa chúng; đối
   chiếu với owner `DAT_181454620` của response `0xBB` để loại liên hệ giả do

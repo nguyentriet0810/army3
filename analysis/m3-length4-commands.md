@@ -100,6 +100,11 @@ có consumer hoặc metadata đủ rõ.
 - `Confirmed`: ba blob lần lượt đi vào `FUN_1804F5C70`, `FUN_180451670` và
   `FUN_180450FA0`. Các hàm này đọc record/array và ghi nhiều bảng state tĩnh;
   ít nhất bộ giải thứ ba đọc count, string và số nguyên để dựng các mảng.
+- `Confirmed`: blob 1 và blob 2 bắt đầu bằng `count:u16 BE`; blob 3 bắt đầu
+  bằng `count:u8`. Cả ba parser return mà không đọc record khi count bằng 0.
+  Vì vậy payload cấu trúc tối thiểu là ba blob lần lượt `00 00`, `00 00`,
+  `00`; vector đầy đủ nằm ở
+  [m3-local-login-path.md](m3-local-login-path.md).
 - `Confirmed`: cuối nhánh handler đặt byte `1` vào field state tĩnh `+0x188`.
   Handler không gọi virtual helper slot `7` đã thấy trong `0xC4`.
 - `Inferred`: `0xE1` là phản hồi tải bộ dữ liệu cấu hình/bootstrap và field
@@ -145,6 +150,21 @@ Các response tương ứng `0xDA`, `0xE1`, `0xE0` lần lượt đặt `+0x18A`
 `+0x189`. Vì các so sánh độc lập, thứ tự request thực tế phụ thuộc cặp cache
 nào mismatch; không có một thứ tự cố định `DA → E1 → E0`.
 
+Phân tích bổ sung đã chốt schema rỗng-về-nghiệp-vụ nhưng hợp lệ-về-cấu-trúc:
+
+- `0xDA`: `[version:u8][blobLength:u32 BE][recordCount:u8]`, với length `1`
+  và count `0`;
+- `0xE1`: version + ba blob như trên;
+- `0xE0`: `[version:u8][firstCount:u8][secondCount:u16 BE]`, cả hai count `0`.
+
+Các fixture này đã được client thật chấp nhận ở mức parser và ghi cache trong
+runtime cô lập ngày 2026-09-28. Tuy nhiên client vẫn đứng ở màn hình
+`Chuẩn bị tài nguyên... 100%` và không gửi `0xDB`, kể cả khi server đổi version
+từ `1` sang `2` để buộc cả ba request `0xDA/0xE1/0xE0`. Vì vậy kết luận cũ rằng
+fixture rỗng tự nó "làm hoàn tất barrier" là **không được runtime xác nhận**.
+`Unknown`: một readiness flag không được đặt, consumer `FUN_18043D800` chưa
+hoạt động ở màn hình hiện tại, hay client còn thiếu một transition khác.
+
 `Confirmed`: `FUN_18043D800` là consumer/barrier của ba cờ. Khi cả ba khác
 zero, nó:
 
@@ -155,6 +175,14 @@ zero, nó:
 Tên `appReady` chỉ là alias mô tả. Command `0xDB` đi vào default/ignore của
 jump table handler đã khảo sát, vì vậy `Inferred`: đây là thông báo client đã
 sẵn sàng hơn là response mang dữ liệu.
+
+`Confirmed`: `FUN_18043D800` là override instance của type UI có static
+singleton ở `DAT_181454500 +0x20`. Static getter của type này tạo instance nếu
+field đang null rồi lưu lại. Barrier kiểm tra ba cờ trực tiếp trong override;
+không có một gate transport khác giữa lần đọc cờ và việc tạo/gửi `0xDB`.
+`Inferred`: nếu runtime cho thấy cả ba cờ bằng `1` nhưng `appReady` vẫn bằng
+`0`, nguyên nhân nằm ở lifecycle/activation của instance UI này, không nằm ở
+codec response cache.
 
 ## Từ `appReady` tới request `0x9E`
 

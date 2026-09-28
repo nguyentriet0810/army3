@@ -209,8 +209,11 @@ biệt quay lại receive-loop, packet server `0xE2` kế tiếp đi qua direct/
 app dispatch; `0xA9/0` đóng socket nên không thể đi tiếp cùng phiên. Đường
 connect còn gửi `0xBB` gồm UUID/config/byte; response đọc bốn string, reset
 dword UI/session `DAT_181454620+0x188`, ghi config state và bật `+0x18D`.
-Đây là bước client/session identity/config được suy luận, chưa phải account
-login đã xác nhận. Đã chốt thứ tự outbound của kết nối mới/reset: connect path
+Lần đầu là bước client/session identity/config được suy luận. Đã lần tiếp
+panel hai-mode: action submit yêu cầu hai text khác rỗng, đóng form rồi gửi
+chính `0xBB(textControl38, textControl30, mode)`. Đây là đường submit account/
+session đã xác nhận về control flow, dù plaintext label và auth semantic vẫn
+`Unknown`. Đã chốt thứ tự outbound của kết nối mới/reset: connect path
 enqueue `0xBB`, khởi động thread rồi enqueue `0x07`; `0xE5` được gửi trực tiếp
 và response của nó mở gate để FIFO drain, nên wire order phía client là
 `0xE5 -> 0xBB -> 0x07`. Thứ tự server response `0xBB` so với server `0xE2`
@@ -219,7 +222,12 @@ của `0xE2` thuộc static owner khác `DAT_1814545E8`. Local server có thể 
 `0xBB -> 0xE2` để lifecycle tuần tự nhưng phải giữ nhãn `Inferred`. Response
 `0xBB` cũng không gọi callback UI; nó thay menu row selector `1` từ hai thành bốn mục.
 Event UI về sau mới mở panel hai-mode, ba action, được phân loại là
-account/session `Inferred`. `0xC4` thuộc UI event case `2` có gate one-shot
+account/session `Inferred`. Ba parser bootstrap đã được thu hẹp tới fixture
+collection rỗng hợp lệ: `0xDA` có blob count `u8=0`; hai blob đầu `0xE1` có
+count `u16=0`, blob ba có count `u8=0`; `0xE0` có count `u8=0` và `u16=0`.
+Handshake có thể dùng seed/shift zero để tạo transform identity cho prototype.
+Toàn bộ vector và state machine local-login nằm ở
+`analysis/m3-local-login-path.md`. `0xC4` thuộc UI event case `2` có gate one-shot
 riêng, không có bằng chứng thuộc chuỗi bootstrap tự động. Xem
 `analysis/m3-length4-commands.md` và
 `analysis/m3-command-9e-selector0.md` cùng
@@ -245,6 +253,12 @@ chỉ là ứng viên keepalive/no-op server → client, chưa có chu kỳ hay 
 State machine, ngữ nghĩa packet
 và ranh giới thẩm quyền mô phỏng vẫn chưa xác định; xem
 `docs/client-architecture.md` và `docs/client-state-machine.md`.
+
+Phần phân tích tĩnh **cần trực tiếp cho mục tiêu qua form đăng nhập local** đã
+đủ để chuyển sang M4/M5: framing, handshake, hai loại `0xBB`, bootstrap rỗng
+và mốc `0xDB` đều có schema triển khai được. M3 tổng thể vẫn `In Progress` vì
+lobby/phòng/trận, asset-vs-server data và quyền quyết định mô phỏng chưa đủ để
+đóng toàn milestone.
 
 ### Mục tiêu
 
@@ -276,7 +290,7 @@ kết nối server.
 
 ## M4 — Đặc tả giao thức
 
-**Trạng thái:** Planned
+**Trạng thái:** Completed cho phạm vi local-login; chờ kiểm chứng runtime ở M6
 
 ### Mục tiêu
 
@@ -284,30 +298,34 @@ Mô tả giao thức client-server dưới dạng độc lập với implementat
 
 ### Công việc
 
-- [ ] Xác định transport, framing, byte order và giới hạn kích thước packet.
-- [ ] Xác định handshake, phiên bản client và cơ chế tạo session.
-- [ ] Xác định nén, mã hóa, checksum hoặc biến đổi byte nếu có.
-- [ ] Lập bảng message ID, hướng truyền và trạng thái hợp lệ.
-- [ ] Mô tả schema cho các message đã xác nhận.
-- [ ] Tạo test vector nhỏ, không chứa thông tin tài khoản hay dữ liệu nhạy cảm.
-- [ ] Viết parser/serializer có kiểm tra độ dài và lỗi đầu vào.
+- [x] Xác định transport, framing, byte order và giới hạn kích thước packet.
+- [x] Xác định handshake, phiên bản client và cơ chế tạo session tối thiểu.
+- [x] Xác định biến đổi byte có trạng thái; chưa thấy nén/checksum ở đường này.
+- [x] Lập bảng message ID, hướng truyền và trạng thái hợp lệ cho local-login.
+- [x] Mô tả schema cho các message đã xác nhận.
+- [x] Tạo test vector nhỏ, không chứa thông tin tài khoản hay dữ liệu nhạy cảm.
+- [x] Viết parser/serializer có kiểm tra độ dài và lỗi đầu vào.
 
 ### Đầu ra
 
 - `docs/protocol.md`
-- `docs/messages/` cho schema chi tiết nếu cần.
-- Bộ codec và unit test trong source tree tương ứng.
+- `docs/messages/login-bootstrap.md` cho schema chi tiết.
+- Codec Python trong `server/army3_protocol/` và unit test trong `tests/`.
 
 ### Tiêu chí hoàn thành
 
 - Encode rồi decode lại các test vector cho kết quả giống ban đầu.
 - Có đủ message đã xác nhận để thực hiện kết nối và đăng nhập cục bộ.
 
+Đã kiểm tra bằng `python -m unittest discover -s tests -v`. Kết quả runtime
+với client thật vẫn là `Inferred` cho tới M6; M4 không chạy client và không
+mở listener mạng.
+
 ---
 
 ## M5 — Server localhost tối thiểu
 
-**Trạng thái:** Planned
+**Trạng thái:** Completed với client mô phỏng; chờ client thật ở M6
 
 ### Mục tiêu
 
@@ -315,30 +333,36 @@ Cho client kết nối an toàn đến một server cục bộ và hoàn thành 
 
 ### Công việc
 
-- [ ] Chọn ngôn ngữ/runtime sau khi hiểu yêu cầu giao thức.
-- [ ] Tạo cấu trúc server tách transport, protocol và domain logic.
-- [ ] Bind mặc định vào `127.0.0.1` và port cấu hình được.
-- [ ] Thêm logging có cấu trúc, không ghi credential hoặc secret.
-- [ ] Thực hiện handshake, heartbeat và đóng kết nối đúng giao thức.
-- [ ] Xử lý packet sai mà không làm server crash.
-- [ ] Viết test tích hợp bằng client mô phỏng nhỏ.
+- [x] Chọn Python 3 và thư viện chuẩn sau khi chốt yêu cầu giao thức M4.
+- [x] Tạo cấu trúc server tách transport, protocol và session state machine.
+- [x] Bind mặc định vào `127.0.0.1`, port cấu hình được; từ chối non-loopback.
+- [x] Thêm logging có cấu trúc, không ghi nội dung hai field `0xBB`.
+- [x] Thực hiện handshake, lifecycle `0x07` đã xác nhận và đóng kết nối sạch.
+- [x] Xử lý packet sai mà không làm server hoặc listener crash.
+- [x] Viết test tích hợp bằng client mô phỏng nhỏ.
 
 ### Đầu ra
 
 - Source trong `server/`.
-- Cấu hình mẫu và hướng dẫn chạy.
-- Unit test và integration test tối thiểu.
+- Cấu hình CLI và hướng dẫn tại `docs/local-server.md`.
+- Unit test và integration test trong `tests/`.
 
 ### Tiêu chí hoàn thành
 
 - Client hoặc client mô phỏng kết nối, handshake và duy trì session ổn định.
 - Server không lắng nghe trên interface công cộng theo cấu hình mặc định.
 
+Client mô phỏng đã hoàn tất `0xE5 -> 0xBB -> 0xE2 -> 0xE1/0xE0/0xDA ->
+0xDB -> 0xBB` qua TCP loopback. Client thật M6 xác nhận thêm pre-login
+`0xFD/0x3A/0x72`, message một chiều `0xB2` và heartbeat server `0x9A`.
+Heartbeat 10 giây giữ nguyên socket quá 40 giây; thiếu heartbeat client đóng
+sau khoảng 18–20 giây.
+
 ---
 
 ## M6 — Chuyển hướng client về localhost
 
-**Trạng thái:** Planned
+**Trạng thái:** Runtime loopback/isolation đã xác nhận; chờ xác nhận UI và `0xDB`
 
 ### Mục tiêu
 
@@ -346,22 +370,31 @@ Cho client kết nối an toàn đến một server cục bộ và hoàn thành 
 
 ### Công việc
 
-- [ ] Xác định chính xác nguồn endpoint và cơ chế chọn server.
-- [ ] Chọn phương pháp ít xâm lấn nhất: config, launcher, DNS cục bộ hoặc patch.
-- [ ] Lưu mọi patch dưới dạng script tái lập, không commit binary đã sửa.
-- [ ] Thêm kiểm tra hash để patch chỉ áp dụng cho đúng bản client.
-- [ ] Đảm bảo không còn kết nối ngoài dự kiến trong chế độ offline.
-- [ ] Viết quy trình khôi phục và tạo lại bản làm việc từ client gốc.
+- [x] Xác định nguồn endpoint, offset và cơ chế chọn server bằng phân tích tĩnh;
+      mapping cuối vẫn `Inferred` cho tới runtime.
+- [x] Chọn patch metadata cùng độ dài trên bản sao làm phương pháp ít điểm chạm.
+- [x] Lưu patch trong `tools/redirect_client.py`; binary sửa nằm dưới `build/`.
+- [x] Kiểm tra đủ manifest 148 file và hai hash metadata cố định.
+- [x] Kiểm chứng runtime với firewall chặn non-loopback; client thật kết nối
+      `127.0.0.1:19150` và không có destination TCP ngoài dự kiến.
+- [x] Viết quy trình xác minh, tạo lại và dùng client gốc làm bản khôi phục.
 
 ### Đầu ra
 
-- Công cụ hoặc script chuyển hướng trong `tools/`.
-- `docs/client-redirection.md`
+- `tools/redirect_client.py` và `scripts/run-local-client-isolated.ps1`.
+- `docs/client-redirection.md`.
 
 ### Tiêu chí hoàn thành
 
 - Client làm việc kết nối đến `127.0.0.1` một cách tái lập được.
 - Client gốc vẫn nguyên vẹn và có thể xác minh bằng hash.
+
+Bản sao `build/army3-local-client/` đã được tạo và qua `verify-copy`; source
+gốc qua `verify-source` trước và sau patch. Runtime đã đi tới hai lần trao đổi
+`0xBB`, đủ ba request cache và heartbeat ổn định. Client ghi cache version `2`
+nhưng vẫn đứng ở `Chuẩn bị tài nguyên... 100%` và không gửi `0xDB`. M6 vì vậy
+đã hoàn tất chuyển hướng/cô lập, còn ranh giới bootstrap → UI phải được chốt
+trước khi bắt đầu phần hồ sơ offline của M7.
 
 ---
 

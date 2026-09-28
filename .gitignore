@@ -14,6 +14,10 @@
 /tmp/
 *.log
 *.dmp
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
 
 # Local editor and OS files
 .vs/

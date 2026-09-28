@@ -17,7 +17,8 @@ Khởi tạo BinaryReader/BinaryWriter
     ↓ (hai worker Thread.Start; FIFO bị gate; gửi trực tiếp client 0xE5)
 Nhận server 0xE5: cài prefix-XOR key, shift và mở send-gate
     ↓ send worker drain FIFO: client 0xBB rồi client 0x07
-    ├─ server response 0xBB → nạp config + mở rộng menu row 1 (thứ tự với 0xE2: Unknown)
+    ├─ server response 0xBB → nạp config + mở rộng menu row 1
+    │    ↓ event UI mở panel mode 0/1; submit hai field → client 0xBB lần nữa
     ├─ 0xA9/1 hoặc /2 → reconcile/reset queue → quay lại receive-loop
     └─ 0xA9/0 → callback + đóng/reset socket (không đi tiếp cùng phiên)
     ↓ (packet server thường kế tiếp: direct dispatch hoặc queue +0xA8)
@@ -70,9 +71,12 @@ bật `+0x18D`, đồng thời thay row selector `1` của một bảng
 `string[][]` từ hai thành bốn mục. Branch `0xBB` không gọi callback hay tự
 chuyển màn hình. Event UI về sau mới kiểm tra row có bốn mục và có thể mở một
 panel hai-mode, ba action; cấu trúc này phù hợp với account/session ở mức
-`Inferred`, còn plaintext label vẫn chưa biết.
-Đây là bằng chứng cho một bước client/session identity/config trước data
-bootstrap, nhưng không phải bằng chứng username/password login. Readiness
+`Inferred`, còn plaintext label vẫn chưa biết. Action `0x232B` của panel yêu
+cầu cả hai text khác rỗng, đóng form rồi gửi `0xBB(text38, text30, mode)`.
+Đây là đường submit account/session `Confirmed` về control flow, dù chưa đủ
+bằng chứng đặt hai field là username/password hay gọi response là xác thực.
+Lần `0xBB` đầu vẫn là bước client/session identity/config trước data
+bootstrap. Readiness
 `+0x188/+0x189/+0x18A` của `0xE2` thuộc static owner khác
 `DAT_1814545E8`; trùng offset không tạo shared state. Client không có gate đã
 thấy để ép thứ tự response `0xBB` và server push `0xE2`, nên thứ tự inbound
@@ -113,7 +117,7 @@ luồng onboarding/account/profile, chưa đủ bằng chứng để gọi là l
 | Trạng thái cần khảo sát | Bằng chứng hiện có | Kết luận |
 | --- | --- | --- |
 | Khởi động và chọn server | Danh sách nhãn tạo các mục callback `6`; handler dùng chỉ số đã chọn để lấy host/port rồi yêu cầu kết nối. Chưa nối với scene hoặc callback Unity | Confirmed về đường callback/kết nối; Inferred về tên màn hình |
-| Account/session | `0xBB` mang UUID/config/byte, reset state UI/session riêng và mở rộng menu row `1` thành bốn mục; event UI sau đó có thể mở panel hai-mode, ba action. `0x2B` là form chín text nhưng chưa có schema credentials + success/failure | Cấu trúc `Confirmed`; tên panel `Inferred`; auth `Unknown` |
+| Account/session | `0xBB` đầu mang UUID/config/byte và mở menu row `1`; panel hai-mode yêu cầu hai text rồi submit lại `0xBB(text38, text30, mode)`. Response không có status byte. `0x2B` là form chín text riêng | Control flow `Confirmed`; tên field và auth semantic `Unknown` |
 | Bootstrap dữ liệu | Packet server `0xE2` đi qua dispatcher chung, điều phối cache hoặc `0xDA/0xE1/0xE0`; barrier ba cờ đặt `appReady` và gửi `0xDB` | Confirmed |
 | Hydrate entity / chuyển scene | UI event case `1` khi `appReady` gửi `0x9E/0`; response hydrate entity, chạy placement/grid, có thể đồng bộ `0x9E/2`, tính camera và chuyển world state | Control flow `Confirmed`; world/gameplay `Inferred` |
 | Phòng | Chưa định vị transition hoặc model state | Unknown |
@@ -132,6 +136,12 @@ kết nối tới endpoint đang chọn. Do đó reconnect do `0x02` là transit
 khỏi accounting, dispatcher bỏ qua, và không có direct sender phía client trong
 128 call-site đã quét. Chưa có bằng chứng về chu kỳ hay timeout khi thiếu nó.
 Xem [m3-connection-lifecycle.md](../analysis/m3-connection-lifecycle.md).
+
+Đường server tối thiểu, handshake identity và fixture bootstrap collection
+rỗng được tổng hợp tại
+[m3-local-login-path.md](../analysis/m3-local-login-path.md). `0xDB` là mốc
+server-side để xác nhận client đã hoàn tất bootstrap; vào world qua `0x9E/0`
+cần dữ liệu map/entity thật và là phạm vi tiếp theo.
 
 Không được dùng bảng này làm đặc tả server. Mỗi transition chỉ được nâng lên
 `Confirmed` khi tìm thấy điều kiện chuyển trạng thái, message tương ứng và

@@ -30,6 +30,11 @@ trên project ở chế độ `-process GameAssembly.dll -noanalysis -readOnly`.
 chạy thành công; project hiện có 43.094 function được nhận diện (con số tại
 thời điểm phân tích từng phần).
 
+[DumpDecompile.java](../scripts/ghidra/DumpDecompile.java) nhận một hoặc nhiều
+địa chỉ native và in toàn bộ decompile của function chứa chúng. Script chỉ đọc
+được thêm để tái lập phân tích panel `0xBB` và các parser bootstrap
+`0xDA/0xE1/0xE0`; nó cũng chạy với `-noanalysis -readOnly`.
+
 ## Bằng chứng mạng từ mã native
 
 Ghidra xác nhận `GameAssembly.dll` có import `WS2_32.DLL::connect`,

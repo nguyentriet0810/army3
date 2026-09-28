@@ -75,14 +75,30 @@ Trên file binary, hai ô tham chiếu dữ liệu mảng chứa handle metadata
 và `0xE00003EF`, không phải con trỏ tới byte array có thể đọc trực tiếp
 trong project Ghidra. Vì vậy giá trị host chưa được giải mã từ client gốc.
 
+Phân tích bổ sung của static constructor trong ISIL cho thấy field `+0x88`
+nhận byte array dài `14`, còn field `+0x90` nhận byte array dài `13`;
+`FUN_180194290` giải field `+0x88` thành nhãn hiển thị và field `+0x90` thành
+phần tử đầu của mảng host. Trong `global-metadata.dat` chỉ có một occurrence
+ASCII của `14.225.206.44`, tại byte offset `6469992`; chuỗi này dài đúng 13
+byte. Vì chưa ánh xạ trực tiếp metadata field-RVA `0xE00003EF` tới offset đó,
+kết luận host bằng chuỗi IP này được nâng thành `Inferred` mạnh, chưa phải
+`Confirmed` tuyệt đối.
+
+Hệ quả triển khai M6: trên **bản sao làm việc**, có thể thử thay đúng 13 byte
+trên bằng `127.000.000.1`. Hai chuỗi cùng độ dài nên không phải sửa immediate
+`0x0D` trong static constructor. `System.Net.IPAddress.Parse` trên môi trường
+hiện tại chuẩn hóa `127.000.000.1` thành `127.0.0.1`. Patch phải xác nhận đúng
+một occurrence, giữ bản gốc nguyên vẹn và chỉ được chạy thử khi outbound đã bị
+chặn. Xem [đường local login](m3-local-login-path.md).
+
 `Inferred`: hai mảng và chỉ số tương ứng với danh sách server/chọn server vì
 chúng được dùng nguyên cặp để khởi tạo kết nối. Không suy ra rằng toàn bộ danh sách
 được nhúng trong client, tải từ server, hay chỉ có một server trong mọi phiên.
 
-`Unknown`: chuỗi mặc định tại chỉ số `0x612`; liệu nó có bằng IP ứng viên
-`14.225.206.44` tìm thấy ở M1 hay không; nguồn và thứ tự ưu tiên các đường
-ghi đè; trường hợp người dùng chọn endpoint nào ở runtime; login/lobby sau
-kết nối. Không dùng IP ứng viên để thử kết nối.
+`Unknown`: chuỗi mặc định tại chỉ số `0x612`; mapping field-RVA cuối cùng của
+byte array host; nguồn và thứ tự ưu tiên các đường ghi đè; trường hợp người
+dùng chọn endpoint nào ở runtime; login/lobby sau kết nối. Không dùng IP ứng
+viên để thử kết nối.
 
 ## Tái lập bằng công cụ hiện có
 
