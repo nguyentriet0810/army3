@@ -23,6 +23,7 @@ from .army3_protocol.messages import (
     ServerSessionResponse,
     ServerPreloginStatus,
     ServerTransportReset2,
+    ScreenBootstrapResponse,
 )
 from .army3_protocol.transform import ByteTransform
 
@@ -56,8 +57,10 @@ class LoginSession:
     # once, instead of relying on the still-unverified cache-hit path.
     _VERSION = 2
 
-    def __init__(self) -> None:
+    def __init__(self, experimental_splash_revision: int | None = None) -> None:
         self._state = SessionState.AWAIT_CLIENT_E5
+        self._experimental_splash_revision = experimental_splash_revision
+        self._splash_transition_sent = False
 
     @property
     def state(self) -> SessionState:
@@ -94,16 +97,7 @@ class LoginSession:
             return SessionOutcome((ServerPreloginStatus().to_packet(),))
         self._decode_session_request(packet)
         self._state = SessionState.BOOTSTRAP
-        return SessionOutcome(
-            (
-                self._session_response().to_packet(),
-                BootstrapVersions(
-                    self._VERSION,
-                    self._VERSION,
-                    self._VERSION,
-                ).to_packet(),
-            )
-        )
+        return SessionOutcome(self._initial_bootstrap_responses())
 
     def _handle_bootstrap(self, packet: Packet) -> SessionOutcome:
         command = packet.command
@@ -122,16 +116,10 @@ class LoginSession:
             # after its 0x3A/0x72/0xFD prelogin sequence. That sequence resets
             # bootstrap state, so replay the version barrier after the 0xBB
             # response instead of assuming the first 0xE2 is still effective.
-            return SessionOutcome(
-                (
-                    self._session_response().to_packet(),
-                    BootstrapVersions(
-                        self._VERSION,
-                        self._VERSION,
-                        self._VERSION,
-                    ).to_packet(),
-                )
-            )
+            return SessionOutcome(self._initial_bootstrap_responses())
+        if command == Command.SCREEN_BOOTSTRAP:
+            self._decode_experimental_screen_request(packet)
+            return SessionOutcome()
         if command == Command.CLIENT_U32_B2:
             self._decode_client_u32_b2(packet)
             return SessionOutcome()
@@ -169,6 +157,9 @@ class LoginSession:
         if command == Command.CLIENT_SESSION:
             self._decode_session_request(packet)
             return SessionOutcome((self._session_response().to_packet(),))
+        if command == Command.SCREEN_BOOTSTRAP:
+            self._decode_experimental_screen_request(packet)
+            return SessionOutcome()
         if command in {Command.UNKNOWN_07, Command.BOOTSTRAP_READY}:
             self._decode_empty(packet, Command(command))
             return SessionOutcome()
@@ -244,6 +235,32 @@ class LoginSession:
             self._LOCAL_TEXT,
             self._LOCAL_TEXT,
         )
+
+    def _initial_bootstrap_responses(self) -> tuple[Packet, ...]:
+        responses = [
+            self._session_response().to_packet(),
+            BootstrapVersions(
+                self._VERSION,
+                self._VERSION,
+                self._VERSION,
+            ).to_packet(),
+        ]
+        if (
+            self._experimental_splash_revision is not None
+            and not self._splash_transition_sent
+        ):
+            responses.append(
+                ScreenBootstrapResponse(
+                    self._experimental_splash_revision
+                ).to_packet()
+            )
+            self._splash_transition_sent = True
+        return tuple(responses)
+
+    def _decode_experimental_screen_request(self, packet: Packet) -> None:
+        if self._experimental_splash_revision is None:
+            self._raise_unexpected(packet)
+        self._decode_empty(packet, Command.SCREEN_BOOTSTRAP)
 
     def _raise_unexpected(self, packet: Packet) -> None:
         raise SessionProtocolError(

@@ -38,7 +38,9 @@ async def _handle_client(
         max_payload_bytes=config.max_payload_bytes,
     )
     outbound_cursor: TransformCursor | None = None
-    session = LoginSession()
+    session = LoginSession(
+        experimental_splash_revision=config.experimental_splash_revision
+    )
 
     try:
         while True:

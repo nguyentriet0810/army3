@@ -17,6 +17,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--port", type=int, default=19150)
     parser.add_argument("--heartbeat-interval", type=float, default=10.0)
     parser.add_argument(
+        "--experimental-splash-revision",
+        type=int,
+        default=None,
+        metavar="S8",
+        help=(
+            "send one experimental 0xC4/selector-0 screen transition after "
+            "the initial 0xBB exchange; value must be -128..127"
+        ),
+    )
+    parser.add_argument(
         "--log-level",
         choices=("DEBUG", "INFO", "WARNING", "ERROR"),
         default="INFO",
@@ -35,6 +45,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             host=args.host,
             port=args.port,
             heartbeat_interval_seconds=args.heartbeat_interval,
+            experimental_splash_revision=args.experimental_splash_revision,
         )
         asyncio.run(serve_forever(config))
     except ValueError as exc:

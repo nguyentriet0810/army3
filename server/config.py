@@ -14,6 +14,7 @@ class ServerConfig:
     read_chunk_size: int = 4096
     backlog: int = 16
     heartbeat_interval_seconds: float = 10.0
+    experimental_splash_revision: int | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.host, str):
@@ -37,6 +38,13 @@ class ServerConfig:
         ):
             raise ValueError(
                 "heartbeat_interval_seconds must be between 0.1 and 300.0"
+            )
+        if self.experimental_splash_revision is not None:
+            self._validate_int(
+                "experimental_splash_revision",
+                self.experimental_splash_revision,
+                -128,
+                127,
             )
 
     @staticmethod

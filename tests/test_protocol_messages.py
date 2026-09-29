@@ -18,6 +18,7 @@ from server.army3_protocol.messages import (
     ServerSessionResponse,
     ServerPreloginStatus,
     ServerTransportReset2,
+    ScreenBootstrapResponse,
 )
 
 
@@ -97,6 +98,25 @@ class LoginMessageCodecTests(unittest.TestCase):
         self.assertEqual(
             encode_frame(message.to_packet(), FrameDirection.SERVER_TO_CLIENT),
             bytes.fromhex("E2 00 03 01 01 01"),
+        )
+
+    def test_screen_bootstrap_golden_vector_uses_length32(self) -> None:
+        message = ScreenBootstrapResponse(127)
+        self.assertEqual(message.encode_payload(), bytes.fromhex("00 7F 00 00"))
+        self.assertEqual(
+            encode_frame(message.to_packet(), FrameDirection.SERVER_TO_CLIENT),
+            bytes.fromhex("C4 00 00 00 04 00 7F 00 00"),
+        )
+        self.assertEqual(
+            ScreenBootstrapResponse.decode_payload(message.encode_payload()),
+            message,
+        )
+
+    def test_screen_bootstrap_preserves_negative_s8(self) -> None:
+        message = ScreenBootstrapResponse(-128, "local")
+        self.assertEqual(
+            ScreenBootstrapResponse.decode_payload(message.encode_payload()),
+            message,
         )
 
     def test_da_empty_golden_vector(self) -> None:

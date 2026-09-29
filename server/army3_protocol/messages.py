@@ -18,6 +18,7 @@ class Command(IntEnum):
     TRANSPORT_SYNC = 0xA9
     CLIENT_U32_B2 = 0xB2
     CLIENT_SESSION = 0xBB
+    SCREEN_BOOTSTRAP = 0xC4
     BOOTSTRAP_DA = 0xDA
     BOOTSTRAP_READY = 0xDB
     BOOTSTRAP_E0 = 0xE0
@@ -48,6 +49,7 @@ class EmptyClientRequest:
             Command.BOOTSTRAP_E1,
             Command.HANDSHAKE,
             Command.PRELOGIN_STATUS,
+            Command.SCREEN_BOOTSTRAP,
         }:
             raise EncodeError(f"0x{int(self.command):02X} is not a known empty request")
 
@@ -339,6 +341,46 @@ class BootstrapVersions:
             reader.read_u8("e0_version"),
             reader.read_u8("da_version"),
         )
+        reader.ensure_finished()
+        return result
+
+
+@dataclass(frozen=True, slots=True)
+class ScreenBootstrapResponse:
+    """Confirmed minimal 0xC4/selector-0 screen-activation branch.
+
+    ``revision`` is compared as a signed byte by the client. Its business
+    meaning and the meaning of ``text`` remain unknown.
+    """
+
+    revision: int
+    text: str = ""
+
+    def encode_payload(self) -> bytes:
+        if (
+            isinstance(self.revision, bool)
+            or not isinstance(self.revision, int)
+            or not -128 <= self.revision <= 127
+        ):
+            raise EncodeError("screen bootstrap revision must be an s8")
+        writer = ByteWriter()
+        writer.write_u8(0, "selector")
+        writer.write_u8(self.revision & 0xFF, "revision")
+        writer.write_string16(self.text, "text")
+        return writer.to_bytes()
+
+    def to_packet(self) -> Packet:
+        return Packet(Command.SCREEN_BOOTSTRAP, self.encode_payload())
+
+    @classmethod
+    def decode_payload(cls, payload: bytes) -> ScreenBootstrapResponse:
+        reader = _reader(payload)
+        selector = reader.read_u8("selector")
+        if selector != 0:
+            raise DecodeError(f"expected 0xC4 selector 0, got {selector}")
+        raw_revision = reader.read_u8("revision")
+        revision = raw_revision if raw_revision < 0x80 else raw_revision - 0x100
+        result = cls(revision, reader.read_string16("text"))
         reader.ensure_finished()
         return result
 

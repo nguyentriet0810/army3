@@ -66,13 +66,24 @@ có consumer hoặc metadata đủ rõ.
   byte state `+0x11` ở một static object khác.
 - `Confirmed`: response đọc selector byte và có nhiều nhánh tiếp tục đọc
   string length-prefixed, `i16`, `i32` và dữ liệu mảng.
+- `Confirmed`: với selector `0`, đường tối thiểu đọc thêm một signed byte
+  revision và một `string16`. Nếu revision khác signed byte lưu local, handler
+  gọi concrete activation `FUN_1801961E0` trên object `UI manager +0x70`.
+  Activation đi qua `FUN_1804E5720` và writer chung `FUN_1804E76B0`, làm đổi
+  current screen tại `UI manager +0x50`.
 - `Confirmed`: hai đường trong handler gọi cùng virtual-dispatch helper với
   selector slot `7` trên object lấy từ field state `+0x70`. Đây là callback
   có thể ảnh hưởng UI/state, nhưng target cụ thể chưa được ánh xạ.
-- `Inferred`: đây là request một lần do thao tác UI kích hoạt, không phải bước
-  tự động ngay sau transport handshake.
-- `Unknown`: ý nghĩa event `2`, selector response và callback slot `7`. Không
-  coi `0xC4` là transition lobby hoặc đặt nó trong chuỗi bootstrap tự động.
+- `Confirmed`: activation reset cờ one-shot rồi đi qua event `2`, vì vậy có
+  thể làm client gửi một request `0xC4` rỗng trước khi hoàn tất screen switch.
+- `Inferred`: server-push selector `0` với revision khác cache là ứng viên
+  trực tiếp để thoát splash trong M6; chưa xác nhận runtime và không gọi nó là
+  transition lobby/login chính thức.
+- `Unknown`: ý nghĩa nghiệp vụ của revision, text, callback slot `7`, payload
+  đầy đủ khi revision bằng cache và tên chính thức của màn hình `+0x70`.
+
+Xem chuỗi writer và kế hoạch runtime ở
+[m6-splash-transition.md](m6-splash-transition.md).
 
 ## `0xD7`: dữ liệu theo chỉ số/collection
 

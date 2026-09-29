@@ -28,6 +28,18 @@ Có thể chọn một port khác:
 python -m server --port 19151
 ```
 
+Thử nghiệm M6 opt-in để gửi đúng một response `0xC4/selector 0` sau initial
+`0xBB` (mặc định tắt):
+
+```powershell
+python -m server --experimental-splash-revision 127 --log-level DEBUG
+```
+
+Giá trị phải nằm trong `-128..127` và phải khác revision đang lưu trong cache
+client để đi vào nhánh activation đã xác nhận tĩnh. `127` chỉ là giá trị thử
+nghiệm, chưa phải hằng protocol. Server sẽ accept nhưng không trả lời request
+`0xC4` rỗng mà client có thể gửi lại, tránh tạo vòng response/activation.
+
 Heartbeat mặc định là 10 giây; có thể đổi trong khoảng 0.1–300 giây:
 
 ```powershell
@@ -53,6 +65,7 @@ AWAIT_INITIAL_BB
   client 0xBB(two strings, mode)
   server 0xBB(four local strings)
   server 0xE2(version 2, 2, 2)
+  optional experimental server 0xC4(selector 0, revision s8, empty string16)
 
 BOOTSTRAP
   client 0xB2(u32): validate and discard
@@ -78,6 +91,14 @@ version để hành vi deterministic; retry sau `0xDB` cũng được trả lờ
 Runtime client thật đã parse và ghi cache version `2` từ ba response rỗng,
 nhưng chưa gửi `0xDB` và vẫn đứng ở `Chuẩn bị tài nguyên... 100%`. Vì vậy server
 hiện mới hoàn tất transport/cache bootstrap, chưa được coi là vượt đăng nhập.
+
+Phân tích tĩnh M6 sau lần chạy này đã tìm được ứng viên splash-exit:
+server-push `0xC4`, selector `0`, revision khác cache local và một `string16`
+có đường concrete tới writer current-screen. Server chỉ gửi gói này khi bật
+explicit CLI flag vì revision thử nghiệm và hành vi runtime chưa được xác
+nhận. Nó accept request `0xC4` rỗng mà activation có thể làm client gửi lại,
+nhưng không replay response thành vòng lặp. Xem
+[m6-splash-transition.md](../analysis/m6-splash-transition.md).
 
 Thứ tự server gửi `0xBB` rồi `0xE2` là lựa chọn triển khai `Inferred`; schema
 và các transition client-side liên quan là `Confirmed` từ phân tích tĩnh.

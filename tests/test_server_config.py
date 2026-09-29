@@ -36,6 +36,20 @@ class ServerConfigTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 ServerConfig(heartbeat_interval_seconds=value)
 
+    def test_experimental_splash_revision_is_optional_s8(self) -> None:
+        self.assertIsNone(ServerConfig().experimental_splash_revision)
+        self.assertEqual(
+            ServerConfig(experimental_splash_revision=-128).experimental_splash_revision,
+            -128,
+        )
+        self.assertEqual(
+            ServerConfig(experimental_splash_revision=127).experimental_splash_revision,
+            127,
+        )
+        for value in (-129, 128, True):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                ServerConfig(experimental_splash_revision=value)
+
 
 if __name__ == "__main__":
     unittest.main()

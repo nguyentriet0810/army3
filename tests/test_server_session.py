@@ -48,6 +48,42 @@ class LoginSessionTests(unittest.TestCase):
         self._enter_bootstrap()
         self.assertEqual(self.session.state, SessionState.BOOTSTRAP)
 
+    def test_experimental_splash_transition_is_sent_once(self) -> None:
+        self.session = LoginSession(experimental_splash_revision=127)
+        self._complete_handshake()
+
+        initial = self.session.handle(
+            ClientSessionRequest("installation", "config", 1).to_packet()
+        )
+        retry = self.session.handle(
+            ClientSessionRequest("installation", "config", 1).to_packet()
+        )
+
+        self.assertEqual(
+            [packet.command for packet in initial.outbound],
+            [
+                Command.CLIENT_SESSION,
+                Command.BOOTSTRAP_VERSIONS,
+                Command.SCREEN_BOOTSTRAP,
+            ],
+        )
+        self.assertEqual(
+            [packet.command for packet in retry.outbound],
+            [Command.CLIENT_SESSION, Command.BOOTSTRAP_VERSIONS],
+        )
+
+    def test_experimental_empty_c4_request_is_accepted_without_response(self) -> None:
+        self.session = LoginSession(experimental_splash_revision=127)
+        self._complete_handshake()
+        self.session.handle(
+            ClientSessionRequest("installation", "config", 1).to_packet()
+        )
+
+        outcome = self.session.handle(Packet(Command.SCREEN_BOOTSTRAP))
+
+        self.assertEqual(outcome.outbound, ())
+        self.assertEqual(self.session.state, SessionState.BOOTSTRAP)
+
     def test_transport_sync0_is_accepted_before_initial_bb(self) -> None:
         self._complete_handshake()
         outcome = self.session.handle(ClientTransportSync0("local", 0, 0).to_packet())

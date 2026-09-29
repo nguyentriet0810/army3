@@ -22,6 +22,7 @@ from server.army3_protocol.messages import (
     HandshakeResponse,
     ServerSessionResponse,
     ServerPreloginStatus,
+    ScreenBootstrapResponse,
 )
 from server.army3_protocol.transform import ByteTransform, TransformCursor
 from server.config import ServerConfig
@@ -224,6 +225,71 @@ class LocalServerIntegrationTests(unittest.IsolatedAsyncioTestCase):
             await writer.wait_closed()
             heartbeat_server.close()
             await heartbeat_server.wait_closed()
+
+    async def test_experimental_splash_transition_and_empty_c4_ack(self) -> None:
+        experimental_server = await start_server(
+            ServerConfig(port=0, experimental_splash_revision=127)
+        )
+        experimental_port = experimental_server.sockets[0].getsockname()[1]
+        reader, writer = await asyncio.open_connection(
+            "127.0.0.1", experimental_port
+        )
+        decoder = FrameStreamDecoder(FrameDirection.SERVER_TO_CLIENT)
+        try:
+            writer.write(
+                encode_frame(
+                    Packet(Command.HANDSHAKE), FrameDirection.CLIENT_TO_SERVER
+                )
+            )
+            await writer.drain()
+            handshake_packet = (await self._read_packets(reader, decoder, 1))[0]
+            handshake = HandshakeResponse.decode_payload(handshake_packet.payload)
+            transform = ByteTransform.from_seed(handshake.seed, handshake.shift)
+            decoder.cursor = transform.cursor()
+            client_cursor = transform.cursor()
+
+            writer.write(
+                encode_frame(
+                    ClientSessionRequest("installation", "config", 1).to_packet(),
+                    FrameDirection.CLIENT_TO_SERVER,
+                    client_cursor,
+                )
+            )
+            await writer.drain()
+            responses = await self._read_packets(reader, decoder, 3)
+            self.assertEqual(
+                [packet.command for packet in responses],
+                [
+                    Command.CLIENT_SESSION,
+                    Command.BOOTSTRAP_VERSIONS,
+                    Command.SCREEN_BOOTSTRAP,
+                ],
+            )
+            self.assertEqual(
+                ScreenBootstrapResponse.decode_payload(responses[2].payload),
+                ScreenBootstrapResponse(127),
+            )
+
+            writer.write(
+                encode_frame(
+                    Packet(Command.SCREEN_BOOTSTRAP),
+                    FrameDirection.CLIENT_TO_SERVER,
+                    client_cursor,
+                )
+                + encode_frame(
+                    Packet(Command.PRELOGIN_STATUS),
+                    FrameDirection.CLIENT_TO_SERVER,
+                    client_cursor,
+                )
+            )
+            await writer.drain()
+            status = (await self._read_packets(reader, decoder, 1))[0]
+            self.assertEqual(status.command, Command.PRELOGIN_STATUS)
+        finally:
+            writer.close()
+            await writer.wait_closed()
+            experimental_server.close()
+            await experimental_server.wait_closed()
 
     async def test_protocol_violation_closes_only_that_connection(self) -> None:
         reader, writer = await asyncio.open_connection("127.0.0.1", self.port)
