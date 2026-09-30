@@ -67,20 +67,28 @@ có consumer hoặc metadata đủ rõ.
 - `Confirmed`: response đọc selector byte và có nhiều nhánh tiếp tục đọc
   string length-prefixed, `i16`, `i32` và dữ liệu mảng.
 - `Confirmed`: với selector `0`, đường tối thiểu đọc thêm một signed byte
-  revision và một `string16`. Nếu revision khác signed byte lưu local, handler
-  gọi concrete activation `FUN_1801961E0` trên object `UI manager +0x70`.
-  Activation đi qua `FUN_1804E5720` và writer chung `FUN_1804E76B0`, làm đổi
-  current screen tại `UI manager +0x50`.
-- `Confirmed`: hai đường trong handler gọi cùng virtual-dispatch helper với
-  selector slot `7` trên object lấy từ field state `+0x70`. Đây là callback
-  có thể ảnh hưởng UI/state, nhưng target cụ thể chưa được ánh xạ.
-- `Confirmed`: activation reset cờ one-shot rồi đi qua event `2`, vì vậy có
-  thể làm client gửi một request `0xC4` rỗng trước khi hoàn tất screen switch.
-- `Inferred`: server-push selector `0` với revision khác cache là ứng viên
-  trực tiếp để thoát splash trong M6; chưa xác nhận runtime và không gọi nó là
-  transition lobby/login chính thức.
-- `Unknown`: ý nghĩa nghiệp vụ của revision, text, callback slot `7`, payload
-  đầy đủ khi revision bằng cache và tên chính thức của màn hình `+0x70`.
+  revision và một `string16`, rồi so revision với signed value đọc từ cache
+  key `vcBig`.
+- `Confirmed`: revision khác cache gọi direct activation `FUN_1801961E0` trên
+  object `UI manager +0x70`. Activation đổi current screen `+0x50`, mở flow
+  "Đang tải dữ liệu" và có thể gửi request `0xC4` rỗng. Runtime revision `127`
+  xác nhận đầy đủ chuỗi này.
+- `Confirmed`: revision bằng cache gọi generic virtual dispatcher
+  `FUN_1800028E0(slot=7, target)`. Số `7` ở đây là vtable slot tại offset
+  `+0x1A8`, không phải UI event code `7`. Vtable live của target trỏ tới
+  `FUN_180195570`; runtime revision `0` với local `vcBig=0` đặt cache-hit
+  `+0x84=1` và không gửi request tải `0xC4`.
+- `Confirmed`: selector `1` là `[01][resourceVersion:u8][itemCount:u16 BE]`.
+  Selector `2` là `[02][key:string16][length:u32 BE][bytes]`; mỗi item được
+  ghi vào cache local, tăng progress, và item cuối ghi marker `vcBig`.
+- `Confirmed` runtime: một selector-2 giả chỉ chứa một zero byte đi hết bộ
+  đếm nhưng sau đó làm client crash trong `UnityPlayer.dll`; không coi fixture
+  giả này là resource hợp lệ.
+- `Confirmed` runtime sau cache-hit và thao tác UI: current screen trở thành
+  singleton login, splash `+0x58=0`, `appReady=1`, rồi client gửi `0xC6` và
+  `0xDB` qua chuỗi reconnect.
+- `Unknown`: ý nghĩa nghiệp vụ của revision/text, key resource hợp lệ và tên
+  chính thức của màn hình `+0x70`.
 
 Xem chuỗi writer và kế hoạch runtime ở
 [m6-splash-transition.md](m6-splash-transition.md).

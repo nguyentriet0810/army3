@@ -77,6 +77,42 @@ Không heartbeat, client thật đóng socket sau khoảng 18–20 giây im lặ
 trò keepalive vì vậy là `Confirmed` ở runtime; app dispatcher không cần gửi
 response cho command này.
 
+## `0xE4` danh sách khu vực/phòng
+
+Sau khi người dùng vào `Chơi mới` và chọn mục đầu của list local, client gửi:
+
+```text
+[mode:u8 = 0]
+```
+
+Frame logic chưa transform:
+
+```text
+E4 00 01 00
+```
+
+Handler client đọc một selector byte trước. Selector `1` mở hộp thoại
+`Nhập mật khẩu của phòng`; đây không phải response tạo người chơi mới.
+Selector khác `1` đọc các record liên tiếp tới hết payload:
+
+```text
+[selector:u8 != 1]
+repeated until payload exhausted:
+  [areaId:s8]
+  if areaId != -1:
+    [flag11:u8] [flag13:u8]
+    [occupancy:u8] [capacity:u8]
+    [money:u32 BE]
+  [name:string16]
+```
+
+Fixture server hiện dùng selector `0` với một record tên `Khu vực Local`.
+Request mode `0`, nhánh password và schema record là `Confirmed` bằng phân
+tích native cùng localization runtime. Ý nghĩa của hai flag vẫn `Unknown`;
+tên các trường id/occupancy/capacity/money là `Inferred` từ consumer UI.
+Runtime push chủ động giữ socket sống nhưng chưa xác nhận được record đã nằm
+trong object UI, nên thời điểm push và offset lưu record vẫn đang được kiểm tra.
+
 ## `0xBB` client/session
 
 Client payload:
@@ -182,6 +218,38 @@ E0 00 04 01 00 00 00
 
 Codec M4 chỉ hỗ trợ subset count zero. Record non-empty bị từ chối rõ ràng
 vì schema đầy đủ chưa được xác nhận.
+
+## `0xC4` screen/resource selector
+
+Selector `0`:
+
+```text
+[selector:u8=0] [revision:s8] [text:string16]
+```
+
+Revision bằng signed byte cache `vcBig` đi qua cache-hit activation; mismatch
+mở flow tải dữ liệu. Selector `1/2` có schema:
+
+```text
+[selector:u8=1] [resourceVersion:u8] [itemCount:u16 BE]
+[selector:u8=2] [key:string16] [length:u32 BE] [bytes:length]
+```
+
+Resource content hợp lệ vẫn `Unknown`; fixture một zero byte không hợp lệ đã
+làm client crash sau khi hoàn tất bộ đếm, nên server không phát selector
+`1/2` giả.
+
+## `0xC6` sau UI transition
+
+Sender native ghi một `string16` rồi byte hằng `1`. Capture đầu tiên có chuỗi
+rỗng, tạo payload:
+
+```text
+00 00 01
+```
+
+Ý nghĩa nghiệp vụ của string vẫn `Unknown`; server validate schema nhưng không
+lưu hoặc ghi log giá trị này.
 
 ## `0x07` và `0xDB`
 

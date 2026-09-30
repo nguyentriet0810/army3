@@ -362,7 +362,7 @@ sau khoảng 18–20 giây.
 
 ## M6 — Chuyển hướng client về localhost
 
-**Trạng thái:** Runtime loopback/isolation đã xác nhận; chờ xác nhận UI và `0xDB`
+**Trạng thái:** Completed
 
 ### Mục tiêu
 
@@ -378,6 +378,10 @@ sau khoảng 18–20 giây.
 - [x] Kiểm chứng runtime với firewall chặn non-loopback; client thật kết nối
       `127.0.0.1:19150` và không có destination TCP ngoài dự kiến.
 - [x] Viết quy trình xác minh, tạo lại và dùng client gốc làm bản khôi phục.
+- [x] Xác nhận `0xC4/selector 0` cache-hit chuyển tới singleton login,
+      `appReady=1`, client phát `0xC6` rồi `0xDB`.
+- [x] Thêm codec `0xC6` và reconnect transition cho `0xDB`.
+- [x] Chạy lại client và xác nhận server không đóng socket sau hai command.
 
 ### Đầu ra
 
@@ -390,17 +394,17 @@ sau khoảng 18–20 giây.
 - Client gốc vẫn nguyên vẹn và có thể xác minh bằng hash.
 
 Bản sao `build/army3-local-client/` đã được tạo và qua `verify-copy`; source
-gốc qua `verify-source` trước và sau patch. Runtime đã đi tới hai lần trao đổi
-`0xBB`, đủ ba request cache và heartbeat ổn định. Client ghi cache version `2`
-nhưng vẫn đứng ở `Chuẩn bị tài nguyên... 100%` và không gửi `0xDB`. M6 vì vậy
-đã hoàn tất chuyển hướng/cô lập, còn ranh giới bootstrap → UI phải được chốt
-trước khi bắt đầu phần hồ sơ offline của M7.
+gốc qua `verify-source` trước và sau patch. Runtime cache-hit đã đi khỏi
+splash, kích hoạt singleton login, đặt `appReady=1` và phát `0xC6` cùng
+`0xDB`. Server mới chấp nhận cả hai packet và giữ nguyên socket với
+heartbeat trong khi người dùng thao tác tới màn hình `Chơi mới`.
 
 ---
 
 ## M7 — Đăng nhập và dữ liệu người chơi offline
 
-**Trạng thái:** Planned
+**Trạng thái:** In progress — đã khôi phục và triển khai danh sách khu vực/
+phòng `0xE4`; chờ xác nhận runtime record và transition sau `Chơi mới`
 
 ### Mục tiêu
 
@@ -408,7 +412,15 @@ Cho phép vào game bằng hồ sơ cục bộ không cần tài khoản bên ng
 
 ### Công việc
 
-- [ ] Mô phỏng đăng nhập hoặc tạo session offline.
+- [x] Mô phỏng bootstrap session offline đủ để mở màn hình account.
+- [x] Ánh xạ selection `Chơi mới` tới request `0xE4` mode `0`.
+- [x] Xác định selector `1` là hộp thoại mật khẩu và khôi phục schema list
+      record cho selector khác `1`.
+- [x] Thêm codec, state transition và test loopback cho danh sách `0xE4`.
+- [ ] Xác nhận thời điểm response `0xE4`, vị trí record trong UI và capture
+      command kế tiếp sau khi người dùng chọn khu vực/phòng.
+- [ ] Khôi phục schema item/group tối thiểu nếu màn hình đích thực sự yêu cầu;
+      collection rỗng không còn được coi là blocker trực tiếp nếu chưa có bằng chứng.
 - [ ] Tạo hồ sơ nhân vật mặc định.
 - [ ] Gửi dữ liệu phiên bản, tiền tệ, chỉ số và inventory tối thiểu.
 - [ ] Xác định trường bắt buộc và giá trị mặc định hợp lệ.

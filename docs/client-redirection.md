@@ -128,18 +128,27 @@ tin cậy và thay đổi Windows Firewall tạm thời.
 - [x] runtime đi qua `0xE5 -> 0xFD -> 0xBB -> 0xE2 -> 0xB2 -> 0x07`;
 - [x] client chấp nhận bootstrap cache rỗng và heartbeat `0x9A`; một socket
   sống ổn định quá 40 giây thay vì timeout khoảng 20 giây;
-- [ ] client gửi `0xDB` sau bootstrap;
+- [x] server-push `0xC4/selector 0` làm current screen đổi từ splash `+0x58`
+  sang target `+0x70`; nhánh cache-hit không yêu cầu tải resource;
+- [x] sau thao tác UI, singleton login thành current screen, splash bằng `0`,
+  `appReady=1`, và client phát `0xC6` rồi `0xDB` qua reconnect;
+- [x] xác nhận runtime server mới giữ socket sau `0xC6`/`0xDB`;
 - UI mở được panel hai mode và submit `0xBB` mà không disconnect;
 - [x] firewall chặn TCP/UDP ngoài loopback;
 - [x] sau khi thoát, firewall rule tạm đã được gỡ; source/copy qua verify.
 
-Client thật hiện đứng ở `Chuẩn bị tài nguyên... 100%`. Ép version cache từ `1`
-sang `2` đã làm phát đủ ba request và ghi lại cache, nhưng không tạo `0xDB`.
+Baseline trước `0xC4` đứng ở `Chuẩn bị tài nguyên... 100%`. Revision mismatch
+`127` mở flow "Đang tải dữ liệu" và phát request `0xC4`; không dùng nhánh này
+vì resource hợp lệ chưa được khôi phục. Cache hiện tại có
+`vcBig=3`, nên server dùng revision `3`; revision là giá trị theo cache chứ
+không phải hằng protocol. Barrier đã hội tụ, client phát `0xC6` payload
+`00 00 01`, rồi `0xDB` rỗng sau reconnect. Server giữ nguyên kết nối và
+tiếp tục heartbeat qua hai packet này; M6 vì vậy đã hoàn tất.
 Một kết nối TLS phụ tới loopback `443` có SNI
 `config.uca.cloud.unity3d.com`, nên được xác định là Unity Analytics config và
-không phải dependency Army3 cần giả lập. Lần chạy tiếp theo cần đọc ba cờ
-readiness/appReady bằng `tools/inspect_runtime_state.py`; thao tác này chỉ được
-thực hiện trong môi trường firewall cô lập đã bật.
+không phải dependency Army3 cần giả lập. Inspector đã xác nhận
+`appReady=1`, các readiness flag đã reset và socket chỉ có destination
+`127.0.0.1:19150` trong lần chạy cô lập cuối.
 
 Trong khi client còn ở màn hình 100%, lấy PID của đúng executable trong bản
 sao rồi chạy read-only inspector:

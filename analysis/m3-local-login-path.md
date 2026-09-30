@@ -176,8 +176,8 @@ frame:   E0 00 04 02 00 00 00
 
 Phân tích tĩnh cho thấy handler tương ứng đặt readiness flag ngay sau khi
 parser/cache path hoàn tất. Khi đủ ba flag, `FUN_18043D800` đặt `appReady = 1`,
-gửi `0xDB` rỗng rồi xóa ba flag. Nhận `0xDB` vẫn là tiêu chí server-side tốt
-nhất cho việc hoàn tất bootstrap, nhưng runtime hiện chưa đạt tiêu chí này.
+gửi `0xDB` rỗng rồi xóa ba flag. Nhận `0xDB` là tiêu chí server-side đã
+được xác nhận runtime cho việc hoàn tất bootstrap.
 
 ### Đối chiếu runtime 2026-09-28
 
@@ -191,10 +191,9 @@ nhất cho việc hoàn tất bootstrap, nhưng runtime hiện chưa đạt tiê
 - `Confirmed`: kết nối loopback phụ cổng `443` mang TLS ClientHello với SNI
   `config.uca.cloud.unity3d.com`; đây là Unity Analytics config, không phải
   endpoint tài nguyên Army3 và không nên được giả lập như một phần protocol.
-- `Unknown`: giá trị thực tế của ba readiness flag và việc singleton UI chứa
-  `FUN_18043D800` có đang active. Công cụ read-only
-  `tools/inspect_runtime_state.py` đã được thêm để phân biệt hai khả năng này
-  ở lần chạy cô lập kế tiếp.
+- `Confirmed` bổ sung ngày 2026-09-29: singleton UI được active,
+  `appReady=1`, ba readiness flag reset về `0`, client phát `0xDB`, và
+  server mới giữ socket sau packet này.
 
 ## Chuyển endpoint về loopback
 

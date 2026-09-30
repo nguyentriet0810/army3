@@ -8,7 +8,9 @@ from server.army3_protocol.messages import (
     BootstrapE1Response,
     BootstrapVersions,
     ClientPostResetStatus,
+    ClientC6Selection,
     ClientPrelogin72,
+    ClientAreaRequest,
     ClientSessionRequest,
     ClientTransportSync0,
     ClientU32B2,
@@ -17,8 +19,12 @@ from server.army3_protocol.messages import (
     HandshakeResponse,
     ServerSessionResponse,
     ServerPreloginStatus,
+    ServerAreaList,
+    ServerAreaRecord,
     ServerTransportReset2,
     ScreenBootstrapResponse,
+    ScreenResourceItemResponse,
+    ScreenResourceManifestResponse,
 )
 
 
@@ -93,6 +99,55 @@ class LoginMessageCodecTests(unittest.TestCase):
                 payload = message.encode_payload()
                 self.assertEqual(type(message).decode_payload(payload), message)
 
+    def test_client_c6_selection_golden_vector(self) -> None:
+        message = ClientC6Selection("")
+        self.assertEqual(message.encode_payload(), bytes.fromhex("00 00 01"))
+        self.assertEqual(
+            ClientC6Selection.decode_payload(message.encode_payload()),
+            message,
+        )
+
+    def test_client_c6_selection_rejects_noncanonical_marker(self) -> None:
+        with self.assertRaisesRegex(DecodeError, "marker 1"):
+            ClientC6Selection.decode_payload(bytes.fromhex("00 00 00"))
+
+    def test_area_e4_golden_vectors(self) -> None:
+        request = ClientAreaRequest()
+        response = ServerAreaList()
+
+        self.assertEqual(request.encode_payload(), b"\x00")
+        name = "Khu vực Local".encode("utf-8")
+        expected_payload = (
+            bytes.fromhex("00 00 00 00 00 08 00 00 00 00")
+            + len(name).to_bytes(2, "big")
+            + name
+        )
+        self.assertEqual(response.encode_payload(), expected_payload)
+        self.assertEqual(
+            encode_frame(response.to_packet(), FrameDirection.SERVER_TO_CLIENT),
+            b"\xE4" + len(expected_payload).to_bytes(2, "big") + expected_payload,
+        )
+        self.assertEqual(
+            ClientAreaRequest.decode_payload(request.encode_payload()),
+            request,
+        )
+        self.assertEqual(
+            ServerAreaList.decode_payload(response.encode_payload()),
+            response,
+        )
+
+    def test_area_e4_rejects_unconfirmed_request_mode(self) -> None:
+        with self.assertRaisesRegex(DecodeError, "mode"):
+            ClientAreaRequest.decode_payload(b"\x01")
+
+    def test_area_e4_supports_sentinel_record_and_rejects_password_branch(self) -> None:
+        message = ServerAreaList((ServerAreaRecord(-1, name="Tạo khu vực"),))
+        self.assertEqual(
+            ServerAreaList.decode_payload(message.encode_payload()), message
+        )
+        with self.assertRaisesRegex(DecodeError, "password-prompt"):
+            ServerAreaList.decode_payload(b"\x01")
+
     def test_bootstrap_versions_golden_vector(self) -> None:
         message = BootstrapVersions(1, 1, 1)
         self.assertEqual(
@@ -116,6 +171,25 @@ class LoginMessageCodecTests(unittest.TestCase):
         message = ScreenBootstrapResponse(-128, "local")
         self.assertEqual(
             ScreenBootstrapResponse.decode_payload(message.encode_payload()),
+            message,
+        )
+
+    def test_screen_resource_manifest_golden_vector(self) -> None:
+        message = ScreenResourceManifestResponse(0, 1)
+        self.assertEqual(message.encode_payload(), bytes.fromhex("01 00 00 01"))
+        self.assertEqual(
+            ScreenResourceManifestResponse.decode_payload(message.encode_payload()),
+            message,
+        )
+
+    def test_screen_resource_item_golden_vector(self) -> None:
+        message = ScreenResourceItemResponse("probe", b"\x00")
+        self.assertEqual(
+            message.encode_payload(),
+            bytes.fromhex("02 00 05 70 72 6F 62 65 00 00 00 01 00"),
+        )
+        self.assertEqual(
+            ScreenResourceItemResponse.decode_payload(message.encode_payload()),
             message,
         )
 

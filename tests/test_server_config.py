@@ -9,6 +9,7 @@ class ServerConfigTests(unittest.TestCase):
         self.assertEqual(config.host, "127.0.0.1")
         self.assertEqual(config.port, 19150)
         self.assertEqual(config.heartbeat_interval_seconds, 10.0)
+        self.assertFalse(config.experimental_area_push)
 
     def test_ipv4_and_ipv6_loopback_are_allowed(self) -> None:
         self.assertEqual(ServerConfig(host="127.0.0.2").host, "127.0.0.2")
@@ -49,6 +50,13 @@ class ServerConfigTests(unittest.TestCase):
         for value in (-129, 128, True):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 ServerConfig(experimental_splash_revision=value)
+
+    def test_experimental_area_push_must_be_boolean(self) -> None:
+        self.assertTrue(
+            ServerConfig(experimental_area_push=True).experimental_area_push
+        )
+        with self.assertRaisesRegex(ValueError, "boolean"):
+            ServerConfig(experimental_area_push=1)
 
 
 if __name__ == "__main__":

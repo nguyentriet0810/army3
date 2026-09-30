@@ -13,6 +13,8 @@ from .army3_protocol.messages import (
     BootstrapE1Response,
     BootstrapVersions,
     ClientPostResetStatus,
+    ClientAreaRequest,
+    ClientC6Selection,
     ClientSessionRequest,
     ClientPrelogin72,
     ClientU32B2,
@@ -22,6 +24,7 @@ from .army3_protocol.messages import (
     HandshakeResponse,
     ServerSessionResponse,
     ServerPreloginStatus,
+    ServerAreaList,
     ServerTransportReset2,
     ScreenBootstrapResponse,
 )
@@ -57,10 +60,16 @@ class LoginSession:
     # once, instead of relying on the still-unverified cache-hit path.
     _VERSION = 2
 
-    def __init__(self, experimental_splash_revision: int | None = None) -> None:
+    def __init__(
+        self,
+        experimental_splash_revision: int | None = None,
+        experimental_area_push: bool = False,
+    ) -> None:
         self._state = SessionState.AWAIT_CLIENT_E5
         self._experimental_splash_revision = experimental_splash_revision
         self._splash_transition_sent = False
+        self._experimental_area_push = experimental_area_push
+        self._area_push_sent = False
 
     @property
     def state(self) -> SessionState:
@@ -95,6 +104,10 @@ class LoginSession:
         if packet.command == Command.PRELOGIN_STATUS:
             self._decode_empty(packet, Command.PRELOGIN_STATUS)
             return SessionOutcome((ServerPreloginStatus().to_packet(),))
+        if packet.command == Command.BOOTSTRAP_READY:
+            self._decode_empty(packet, Command.BOOTSTRAP_READY)
+            self._state = SessionState.ACCOUNT_PANEL_READY
+            return SessionOutcome(self._area_push_if_enabled())
         self._decode_session_request(packet)
         self._state = SessionState.BOOTSTRAP
         return SessionOutcome(self._initial_bootstrap_responses())
@@ -123,6 +136,9 @@ class LoginSession:
         if command == Command.CLIENT_U32_B2:
             self._decode_client_u32_b2(packet)
             return SessionOutcome()
+        if command == Command.CLIENT_SELECTION:
+            self._decode_client_c6_selection(packet)
+            return SessionOutcome()
         if command == Command.UNKNOWN_07:
             self._decode_empty(packet, Command.UNKNOWN_07)
             return SessionOutcome()
@@ -140,7 +156,7 @@ class LoginSession:
         if command == Command.BOOTSTRAP_READY:
             self._decode_empty(packet, Command.BOOTSTRAP_READY)
             self._state = SessionState.ACCOUNT_PANEL_READY
-            return SessionOutcome()
+            return SessionOutcome(self._area_push_if_enabled())
         self._raise_unexpected(packet)
 
     def _handle_ready(self, packet: Packet) -> SessionOutcome:
@@ -160,6 +176,12 @@ class LoginSession:
         if command == Command.SCREEN_BOOTSTRAP:
             self._decode_experimental_screen_request(packet)
             return SessionOutcome()
+        if command == Command.CLIENT_SELECTION:
+            self._decode_client_c6_selection(packet)
+            return SessionOutcome()
+        if command == Command.AREA:
+            self._decode_client_area(packet)
+            return SessionOutcome((ServerAreaList().to_packet(),))
         if command in {Command.UNKNOWN_07, Command.BOOTSTRAP_READY}:
             self._decode_empty(packet, Command(command))
             return SessionOutcome()
@@ -217,6 +239,24 @@ class LoginSession:
             return ClientU32B2.decode_payload(packet.payload)
         except DecodeError as exc:
             raise SessionProtocolError("invalid client 0xB2 payload") from exc
+
+    def _decode_client_c6_selection(self, packet: Packet) -> ClientC6Selection:
+        try:
+            return ClientC6Selection.decode_payload(packet.payload)
+        except DecodeError as exc:
+            raise SessionProtocolError("invalid client 0xC6 payload") from exc
+
+    def _decode_client_area(self, packet: Packet) -> ClientAreaRequest:
+        try:
+            return ClientAreaRequest.decode_payload(packet.payload)
+        except DecodeError as exc:
+            raise SessionProtocolError("invalid client 0xE4 payload") from exc
+
+    def _area_push_if_enabled(self) -> tuple[Packet, ...]:
+        if not self._experimental_area_push or self._area_push_sent:
+            return ()
+        self._area_push_sent = True
+        return (ServerAreaList().to_packet(),)
 
     def _decode_empty(self, packet: Packet, command: Command) -> None:
         if packet.command != command:

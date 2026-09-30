@@ -27,6 +27,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--experimental-area-push",
+        action="store_true",
+        help=(
+            "push one deterministic 0xE4 area-list record when the client "
+            "reaches account-ready; intended only for isolated UI verification"
+        ),
+    )
+    parser.add_argument(
         "--log-level",
         choices=("DEBUG", "INFO", "WARNING", "ERROR"),
         default="INFO",
@@ -46,6 +54,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             port=args.port,
             heartbeat_interval_seconds=args.heartbeat_interval,
             experimental_splash_revision=args.experimental_splash_revision,
+            experimental_area_push=args.experimental_area_push,
         )
         asyncio.run(serve_forever(config))
     except ValueError as exc:

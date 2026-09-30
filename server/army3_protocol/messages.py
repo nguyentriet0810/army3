@@ -19,11 +19,13 @@ class Command(IntEnum):
     CLIENT_U32_B2 = 0xB2
     CLIENT_SESSION = 0xBB
     SCREEN_BOOTSTRAP = 0xC4
+    CLIENT_SELECTION = 0xC6
     BOOTSTRAP_DA = 0xDA
     BOOTSTRAP_READY = 0xDB
     BOOTSTRAP_E0 = 0xE0
     BOOTSTRAP_E1 = 0xE1
     BOOTSTRAP_VERSIONS = 0xE2
+    AREA = 0xE4
     HANDSHAKE = 0xE5
     PRELOGIN_STATUS = 0xFD
 
@@ -292,6 +294,37 @@ class ClientU32B2:
 
 
 @dataclass(frozen=True, slots=True)
+class ClientC6Selection:
+    """Client 0xC6 action observed when leaving the splash flow.
+
+    Static analysis confirms a string16 followed by the literal byte ``1``.
+    The string's business meaning remains unknown; it was empty in the first
+    runtime capture.
+    """
+
+    text: str
+
+    def encode_payload(self) -> bytes:
+        writer = ByteWriter()
+        writer.write_string16(self.text, "text")
+        writer.write_u8(1, "marker")
+        return writer.to_bytes()
+
+    def to_packet(self) -> Packet:
+        return Packet(Command.CLIENT_SELECTION, self.encode_payload())
+
+    @classmethod
+    def decode_payload(cls, payload: bytes) -> ClientC6Selection:
+        reader = _reader(payload)
+        text = reader.read_string16("text")
+        marker = reader.read_u8("marker")
+        reader.ensure_finished()
+        if marker != 1:
+            raise DecodeError(f"expected client 0xC6 marker 1, got {marker}")
+        return cls(text)
+
+
+@dataclass(frozen=True, slots=True)
 class ServerSessionResponse:
     list_for_mode1: str
     raw_for_mode1: str
@@ -346,6 +379,120 @@ class BootstrapVersions:
 
 
 @dataclass(frozen=True, slots=True)
+class ClientAreaRequest:
+    """The confirmed one-byte 0xE4 request sent by the area-list UI path.
+
+    The general native sender supports other modes with additional fields, but
+    the ``Chơi mới`` branch calls it with mode 0 and no trailing payload.
+    """
+
+    mode: int = 0
+
+    def encode_payload(self) -> bytes:
+        if self.mode != 0:
+            raise EncodeError("only the confirmed 0xE4 area mode 0 is supported")
+        writer = ByteWriter()
+        writer.write_u8(self.mode, "mode")
+        return writer.to_bytes()
+
+    def to_packet(self) -> Packet:
+        return Packet(Command.AREA, self.encode_payload())
+
+    @classmethod
+    def decode_payload(cls, payload: bytes) -> ClientAreaRequest:
+        reader = _reader(payload)
+        mode = reader.read_u8("mode")
+        reader.ensure_finished()
+        if mode != 0:
+            raise DecodeError(
+                f"unsupported 0xE4 area request mode {mode}"
+            )
+        return cls(mode)
+
+
+@dataclass(frozen=True, slots=True)
+class ServerAreaRecord:
+    """One confirmed 0xE4 area/room-list record.
+
+    Field offsets are confirmed from the native parser.  Only ``area_id``,
+    ``occupancy``, ``capacity``, ``money`` and ``name`` have evidence-backed
+    provisional meanings from their UI consumers/localization strings; the
+    two flags intentionally retain structural names.
+    """
+
+    area_id: int
+    flag_0x11: int = 0
+    flag_0x13: int = 0
+    occupancy: int = 0
+    capacity: int = 8
+    money: int = 0
+    name: str = "Khu vực Local"
+
+    def encode_into(self, writer: ByteWriter, index: int) -> None:
+        if self.area_id != -1 and not 0 <= self.area_id <= 127:
+            raise EncodeError(f"records[{index}].area_id must be -1 or 0..127")
+        writer.write_u8(self.area_id & 0xFF, f"records[{index}].area_id")
+        if self.area_id != -1:
+            writer.write_u8(self.flag_0x11, f"records[{index}].flag_0x11")
+            writer.write_u8(self.flag_0x13, f"records[{index}].flag_0x13")
+            writer.write_u8(self.occupancy, f"records[{index}].occupancy")
+            writer.write_u8(self.capacity, f"records[{index}].capacity")
+            writer.write_u32(self.money, f"records[{index}].money")
+        writer.write_string16(self.name, f"records[{index}].name")
+
+    @classmethod
+    def decode_from(cls, reader: ByteReader, index: int) -> ServerAreaRecord:
+        raw_id = reader.read_u8(f"records[{index}].area_id")
+        area_id = -1 if raw_id == 0xFF else raw_id
+        if area_id == -1:
+            return cls(area_id=-1, name=reader.read_string16(f"records[{index}].name"))
+        return cls(
+            area_id=area_id,
+            flag_0x11=reader.read_u8(f"records[{index}].flag_0x11"),
+            flag_0x13=reader.read_u8(f"records[{index}].flag_0x13"),
+            occupancy=reader.read_u8(f"records[{index}].occupancy"),
+            capacity=reader.read_u8(f"records[{index}].capacity"),
+            money=reader.read_u32(f"records[{index}].money"),
+            name=reader.read_string16(f"records[{index}].name"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ServerAreaList:
+    """The record-list branch of the server-to-client 0xE4 handler."""
+
+    records: tuple[ServerAreaRecord, ...] = (ServerAreaRecord(area_id=0),)
+    selector: int = 0
+
+    def encode_payload(self) -> bytes:
+        if self.selector == 1 or not 0 <= self.selector <= 0xFF:
+            raise EncodeError("0xE4 area-list selector must be a byte other than 1")
+        if not self.records:
+            raise EncodeError("0xE4 area list requires at least one record")
+        writer = ByteWriter()
+        writer.write_u8(self.selector, "selector")
+        for index, record in enumerate(self.records):
+            record.encode_into(writer, index)
+        return writer.to_bytes()
+
+    def to_packet(self) -> Packet:
+        return Packet(Command.AREA, self.encode_payload())
+
+    @classmethod
+    def decode_payload(cls, payload: bytes) -> ServerAreaList:
+        reader = _reader(payload)
+        selector = reader.read_u8("selector")
+        if selector == 1:
+            raise DecodeError("0xE4 selector 1 is the password-prompt branch")
+        records: list[ServerAreaRecord] = []
+        while reader.remaining:
+            records.append(ServerAreaRecord.decode_from(reader, len(records)))
+        if not records:
+            raise DecodeError("0xE4 area list contains no records")
+        return cls(tuple(records), selector)
+
+
+@dataclass(frozen=True, slots=True)
 class ScreenBootstrapResponse:
     """Confirmed minimal 0xC4/selector-0 screen-activation branch.
 
@@ -383,6 +530,79 @@ class ScreenBootstrapResponse:
         result = cls(revision, reader.read_string16("text"))
         reader.ensure_finished()
         return result
+
+
+@dataclass(frozen=True, slots=True)
+class ScreenResourceManifestResponse:
+    """Inferred 0xC4/selector-1 resource-transfer manifest.
+
+    Static analysis confirms the field order and that ``item_count`` controls
+    completion of the selector-2 transfer.  The business meaning of
+    ``resource_version`` remains unknown.
+    """
+
+    resource_version: int
+    item_count: int
+
+    def encode_payload(self) -> bytes:
+        writer = ByteWriter()
+        writer.write_u8(1, "selector")
+        writer.write_u8(self.resource_version, "resource_version")
+        writer.write_u16(self.item_count, "item_count")
+        return writer.to_bytes()
+
+    def to_packet(self) -> Packet:
+        return Packet(Command.SCREEN_BOOTSTRAP, self.encode_payload())
+
+    @classmethod
+    def decode_payload(cls, payload: bytes) -> ScreenResourceManifestResponse:
+        reader = _reader(payload)
+        selector = reader.read_u8("selector")
+        if selector != 1:
+            raise DecodeError(f"expected 0xC4 selector 1, got {selector}")
+        result = cls(
+            reader.read_u8("resource_version"),
+            reader.read_u16("item_count"),
+        )
+        reader.ensure_finished()
+        return result
+
+
+@dataclass(frozen=True, slots=True)
+class ScreenResourceItemResponse:
+    """Inferred 0xC4/selector-2 resource item.
+
+    The client reads a string16 key, a u32 byte count, and exactly that many
+    bytes before incrementing the selector-1 item counter.
+    """
+
+    key: str
+    data: bytes
+
+    def encode_payload(self) -> bytes:
+        if not isinstance(self.data, (bytes, bytearray, memoryview)):
+            raise EncodeError("screen resource data must be bytes-like")
+        data = bytes(self.data)
+        writer = ByteWriter()
+        writer.write_u8(2, "selector")
+        writer.write_string16(self.key, "key")
+        writer.write_u32(len(data), "data.length")
+        writer.write_bytes(data)
+        return writer.to_bytes()
+
+    def to_packet(self) -> Packet:
+        return Packet(Command.SCREEN_BOOTSTRAP, self.encode_payload())
+
+    @classmethod
+    def decode_payload(cls, payload: bytes) -> ScreenResourceItemResponse:
+        reader = _reader(payload)
+        selector = reader.read_u8("selector")
+        if selector != 2:
+            raise DecodeError(f"expected 0xC4 selector 2, got {selector}")
+        key = reader.read_string16("key")
+        data = reader.read_exact(reader.read_u32("data.length"), "data")
+        reader.ensure_finished()
+        return cls(key, data)
 
 
 @dataclass(frozen=True, slots=True)

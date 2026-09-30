@@ -106,6 +106,10 @@ vẫn bật đúng gate phía client và vẫn duy trì cursor.
 | `0xE1` | S → C | version + ba blob, outer length-32 | `Confirmed` |
 | `0xE0` | C → S | request rỗng | `Confirmed` |
 | `0xE0` | S → C | fixture hai collection rỗng | subset `Confirmed` |
+| `0xC4/0` | S → C | selector, revision `s8`, `string16` | schema/cache compare `Confirmed` |
+| `0xC4/1` | S → C | resource version `u8`, item count `u16` | schema tĩnh `Confirmed` |
+| `0xC4/2` | S → C | key `string16`, length `u32`, bytes | schema tĩnh `Confirmed` |
+| `0xC6` | C → S | `string16` + marker hằng `1` | schema tĩnh/runtime length `Confirmed` |
 | `0xDB` | C → S | request rỗng, báo barrier hoàn tất | cấu trúc `Confirmed`; ý nghĩa `Inferred` |
 
 Schema chi tiết và test vector nằm ở

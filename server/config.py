@@ -15,6 +15,7 @@ class ServerConfig:
     backlog: int = 16
     heartbeat_interval_seconds: float = 10.0
     experimental_splash_revision: int | None = None
+    experimental_area_push: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.host, str):
@@ -46,6 +47,8 @@ class ServerConfig:
                 -128,
                 127,
             )
+        if not isinstance(self.experimental_area_push, bool):
+            raise ValueError("experimental_area_push must be a boolean")
 
     @staticmethod
     def _validate_int(name: str, value: int, minimum: int, maximum: int) -> None:

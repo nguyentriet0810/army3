@@ -39,7 +39,8 @@ async def _handle_client(
     )
     outbound_cursor: TransformCursor | None = None
     session = LoginSession(
-        experimental_splash_revision=config.experimental_splash_revision
+        experimental_splash_revision=config.experimental_splash_revision,
+        experimental_area_push=config.experimental_area_push,
     )
 
     try:
@@ -90,7 +91,15 @@ async def _handle_client(
                     packet.command,
                     len(packet.payload),
                 )
+                previous_state = session.state
                 outcome = session.handle(packet)
+                if session.state is not previous_state:
+                    LOGGER.debug(
+                        "event=session_state_changed connection=%s from=%s to=%s",
+                        connection_id,
+                        previous_state.name,
+                        session.state.name,
+                    )
 
                 for response in outcome.outbound:
                     writer.write(

@@ -15,6 +15,7 @@ from server.army3_protocol.messages import (
     BootstrapE1Response,
     BootstrapVersions,
     ClientPostResetStatus,
+    ClientAreaRequest,
     ClientPrelogin72,
     ClientSessionRequest,
     ClientU32B2,
@@ -22,6 +23,7 @@ from server.army3_protocol.messages import (
     HandshakeResponse,
     ServerSessionResponse,
     ServerPreloginStatus,
+    ServerAreaList,
     ScreenBootstrapResponse,
 )
 from server.army3_protocol.transform import ByteTransform, TransformCursor
@@ -186,6 +188,23 @@ class LocalServerIntegrationTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(
                 ServerSessionResponse.decode_payload(panel_response.payload),
                 ServerSessionResponse("local", "local", "local", "local"),
+            )
+
+            writer.write(
+                encode_frame(
+                    ClientAreaRequest().to_packet(),
+                    FrameDirection.CLIENT_TO_SERVER,
+                    client_cursor,
+                )
+            )
+            await writer.drain()
+            area_response = (
+                await self._read_packets(reader, server_decoder, 1)
+            )[0]
+            self.assertEqual(area_response.command, Command.AREA)
+            self.assertEqual(
+                ServerAreaList.decode_payload(area_response.payload),
+                ServerAreaList(),
             )
         finally:
             writer.close()

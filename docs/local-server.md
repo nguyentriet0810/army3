@@ -32,13 +32,14 @@ Thử nghiệm M6 opt-in để gửi đúng một response `0xC4/selector 0` sau
 `0xBB` (mặc định tắt):
 
 ```powershell
-python -m server --experimental-splash-revision 127 --log-level DEBUG
+python -m server --experimental-splash-revision 0 --log-level DEBUG
 ```
 
-Giá trị phải nằm trong `-128..127` và phải khác revision đang lưu trong cache
-client để đi vào nhánh activation đã xác nhận tĩnh. `127` chỉ là giá trị thử
-nghiệm, chưa phải hằng protocol. Server sẽ accept nhưng không trả lời request
-`0xC4` rỗng mà client có thể gửi lại, tránh tạo vòng response/activation.
+Giá trị phải nằm trong `-128..127`. Để dùng cache local và tránh flow tải
+resource, nó phải **khớp** signed byte trong cache key `vcBig`; cache của
+phiên kiểm thử cuối dùng `3`. Revision không khớp mở màn hình "Đang tải dữ liệu" và làm client gửi request
+`0xC4` rỗng. Server accept request này để chẩn đoán nhưng không replay response,
+tránh vòng activation. Không dùng `127` như một hằng protocol.
 
 Heartbeat mặc định là 10 giây; có thể đổi trong khoảng 0.1–300 giây:
 
@@ -62,6 +63,7 @@ AWAIT_INITIAL_BB
   optional client 0xA9/0 -> server 0xA9/2
   client 0x3A and 0x72: validate and discard
   client 0xFD empty -> server 0xFD(status byte)
+  reconnect client 0xDB empty -> ACCOUNT_PANEL_READY
   client 0xBB(two strings, mode)
   server 0xBB(four local strings)
   server 0xE2(version 2, 2, 2)
@@ -71,13 +73,16 @@ BOOTSTRAP
   client 0xB2(u32): validate and discard
   client 0x3A/0x72: transport metadata, validate and discard
   client 0xFD: return status; client 0xBB retry: replay 0xBB then 0xE2
+  client 0xC6(string16, marker 1): validate and discard
   client 0x07: accept and ignore
   client 0xDA/0xE1/0xE0: return matching empty collection
   client 0xDB: enter ACCOUNT_PANEL_READY
 
 ACCOUNT_PANEL_READY
+  client 0xC6(string16, marker 1): validate and discard
   client 0xBB(two strings, mode 0/1)
   server 0xBB(four local strings)
+  client 0xE4(mode 0) -> server 0xE4(area/room record list)
 ```
 
 Khi transform đã bật và socket im lặng, server gửi `0x9A` rỗng mỗi 10 giây.
@@ -88,17 +93,23 @@ Ba request bootstrap có thể đến theo bất kỳ thứ tự nào hoặc kh�
 cache client đã khớp. Retry `0xBB` trong bootstrap replay cả response phiên và
 version để hành vi deterministic; retry sau `0xDB` cũng được trả lời.
 
-Runtime client thật đã parse và ghi cache version `2` từ ba response rỗng,
-nhưng chưa gửi `0xDB` và vẫn đứng ở `Chuẩn bị tài nguyên... 100%`. Vì vậy server
-hiện mới hoàn tất transport/cache bootstrap, chưa được coi là vượt đăng nhập.
-
-Phân tích tĩnh M6 sau lần chạy này đã tìm được ứng viên splash-exit:
-server-push `0xC4`, selector `0`, revision khác cache local và một `string16`
-có đường concrete tới writer current-screen. Server chỉ gửi gói này khi bật
-explicit CLI flag vì revision thử nghiệm và hành vi runtime chưa được xác
-nhận. Nó accept request `0xC4` rỗng mà activation có thể làm client gửi lại,
-nhưng không replay response thành vòng lặp. Xem
+Runtime client thật đã parse và ghi cache version `2` từ ba response rỗng.
+Revision mismatch `127` mở flow tải và phát `0xC4` rỗng; resource giả tối
+thiểu không hợp lệ và đã làm Unity crash. Revision cache-hit không yêu cầu
+tải resource. Sau thao tác UI, inspector xác nhận current screen là singleton
+login, splash pointer bằng `0`, `appReady=1`; client sau đó phát `0xC6` và
+`0xDB`. Runtime cuối xác nhận server giữ socket và heartbeat qua cả hai
+packet. Server có codec/transition để chấp nhận cả hai, kể cả `0xDB` đến
+ngay sau handshake reconnect trước một `0xBB` mới. Xem
 [m6-splash-transition.md](../analysis/m6-splash-transition.md).
+
+Đường `Chơi mới` có thêm một bước local để chọn mục. Lựa chọn đầu tiên gửi
+`0xE4` mode `0`; server trả selector `0` và một record khu vực/phòng local.
+Selector `1` thực tế mở hộp thoại nhập mật khẩu phòng. Schema list đã được
+xác nhận tĩnh và codec/test đã hoàn tất; runtime push chủ động giữ socket sống
+nhưng chưa chứng minh record được UI nhận do có thể phát trước thời điểm UI
+sẵn sàng.
+Xem [m7-new-player-transition.md](../analysis/m7-new-player-transition.md).
 
 Thứ tự server gửi `0xBB` rồi `0xE2` là lựa chọn triển khai `Inferred`; schema
 và các transition client-side liên quan là `Confirmed` từ phân tích tĩnh.
@@ -111,6 +122,7 @@ trong request `0xBB` không được lưu và không được ghi log. Server t�
 - command không hợp lệ trong state hiện tại;
 - payload rỗng nhưng lại chứa dữ liệu;
 - `0xBB` lỗi schema hoặc mode ngoài `0/1`;
+- `0xE4` ngoài state account-ready, mode khác `0` hoặc có trailing data;
 - length vượt giới hạn 65535 byte;
 - UTF-8 lỗi hoặc payload truncated.
 

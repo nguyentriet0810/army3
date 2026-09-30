@@ -3,14 +3,17 @@ import unittest
 from server.army3_protocol.framing import Packet
 from server.army3_protocol.messages import (
     BootstrapE0EmptyResponse,
+    ClientC6Selection,
     ClientPostResetStatus,
     ClientPrelogin72,
+    ClientAreaRequest,
     ClientU32B2,
     ClientSessionRequest,
     ClientTransportSync0,
     Command,
     ServerSessionResponse,
     ServerPreloginStatus,
+    ServerAreaList,
 )
 from server.session import LoginSession, SessionProtocolError, SessionState
 
@@ -140,6 +143,22 @@ class LoginSessionTests(unittest.TestCase):
         self.assertEqual(outcome.outbound, ())
         self.assertEqual(self.session.state, SessionState.BOOTSTRAP)
 
+    def test_c6_selection_is_accepted_during_bootstrap(self) -> None:
+        self._enter_bootstrap()
+
+        outcome = self.session.handle(ClientC6Selection("").to_packet())
+
+        self.assertEqual(outcome.outbound, ())
+        self.assertEqual(self.session.state, SessionState.BOOTSTRAP)
+
+    def test_db_after_reconnect_handshake_marks_account_panel_ready(self) -> None:
+        self._complete_handshake()
+
+        outcome = self.session.handle(Packet(Command.BOOTSTRAP_READY))
+
+        self.assertEqual(outcome.outbound, ())
+        self.assertEqual(self.session.state, SessionState.ACCOUNT_PANEL_READY)
+
     def test_transport_metadata_can_repeat_during_bootstrap(self) -> None:
         self._enter_bootstrap()
 
@@ -182,6 +201,38 @@ class LoginSessionTests(unittest.TestCase):
         )
         response = ServerSessionResponse.decode_payload(outcome.outbound[0].payload)
         self.assertEqual(response.list_for_mode1, "local")
+
+    def test_ready_state_answers_area_e4_mode0(self) -> None:
+        self._enter_bootstrap()
+        self.session.handle(Packet(Command.BOOTSTRAP_READY))
+
+        outcome = self.session.handle(ClientAreaRequest().to_packet())
+
+        self.assertEqual(len(outcome.outbound), 1)
+        self.assertEqual(outcome.outbound[0].command, Command.AREA)
+        self.assertEqual(
+            ServerAreaList.decode_payload(outcome.outbound[0].payload),
+            ServerAreaList(),
+        )
+        self.assertEqual(self.session.state, SessionState.ACCOUNT_PANEL_READY)
+
+    def test_area_e4_is_rejected_before_account_ready(self) -> None:
+        self._enter_bootstrap()
+
+        with self.assertRaisesRegex(SessionProtocolError, "unexpected command"):
+            self.session.handle(ClientAreaRequest().to_packet())
+
+    def test_experimental_area_push_is_sent_once_at_ready(self) -> None:
+        self.session = LoginSession(experimental_area_push=True)
+        self._enter_bootstrap()
+
+        outcome = self.session.handle(Packet(Command.BOOTSTRAP_READY))
+
+        self.assertEqual(len(outcome.outbound), 1)
+        self.assertEqual(
+            ServerAreaList.decode_payload(outcome.outbound[0].payload),
+            ServerAreaList(),
+        )
 
     def test_cache_match_can_reach_ready_without_data_requests(self) -> None:
         self._enter_bootstrap()
